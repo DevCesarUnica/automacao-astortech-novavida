@@ -1,0 +1,374 @@
+================================================================================
+ESTUDO DE VIABILIDADE
+AUTOMACAO DO FLUXO ASTOR TECH -> NOVA VIDA
+Extracao, Tratamento, Higienizacao e Entrega de Base de Leads
+================================================================================
+
+Empresa: Unica Promotora
+Data do estudo: 16/07/2026
+Responsavel pela elaboracao: Automacao / RPA (Claude Code)
+Status: Rascunho para validacao com areas de Negocio, TI, Juridico/Compliance e
+        Seguranca da Informacao
+
+================================================================================
+1. RESUMO EXECUTIVO
+================================================================================
+
+O presente estudo avalia a viabilidade tecnica, operacional, legal e financeira
+de um robo (RPA) que automatiza o ciclo completo de geracao de leads da Unica
+Promotora, hoje executado manualmente:
+
+  Astor Tech (extracao) -> tratamento do arquivo -> Nova Vida (higienizacao)
+  -> base final pronta para operacao (CPF, Nome, Valor Liberado, Telefone, Email)
+
+Conclusao geral: o projeto E VIAVEL tecnicamente usando automacao de interface
+(RPA classico, via navegador), mas possui um conjunto de riscos e dependencias
+criticas que precisam ser confirmados ANTES do desenvolvimento, principalmente:
+
+  a) Existencia (ou nao) de API oficial nos dois sistemas;
+  b) Mecanismo de autenticacao (2FA, captcha, certificado digital, IP fixo);
+  c) SLA real de processamento da higienizacao no Nova Vida;
+  d) Enquadramento LGPD para tratamento de CPF, telefone e e-mail em fluxo
+     automatizado e recorrente (a cada 1 hora).
+
+Nenhum desses pontos inviabiliza o projeto, mas cada um altera significativamente
+esforco, custo e arquitetura da solucao. Este documento apresenta a analise,
+os riscos, as alternativas de arquitetura e uma recomendacao de caminho a seguir.
+
+================================================================================
+2. ESCOPO DO PROCESSO (conforme especificado)
+================================================================================
+
+2.1 Fluxo geral
+  1. Acessar Astor Tech
+  2. Menu: Gestao de Carteira -> Analise -> Painel de Controle
+  3. Tipo de Consulta: UY3
+  4. Aplicar filtros: Limite por Periodo = 24 Horas; Valor Liberado de
+     R$ 4.001,00 ate R$ 8.000,99
+  5. Clicar "Atualizar Filtros" -> Clicar "Extrair"
+  6. Salvar arquivo no padrao UY3_DDMM_PERFILBASE (ex.: UY3_1507_CLT)
+  7. Tratar arquivo: manter apenas colunas I (CPF), R (Nome), N (Valor Liberado)
+  8. Regra de negocio: manter apenas registros com Valor Liberado > R$ 4.000,00
+     (coluna N)
+  9. Gerar CSV separado por virgula
+ 10. Acessar Nova Vida, autenticar, subir CSV
+ 11. Iniciar higienizacao, aguardar conclusao
+ 12. Baixar base higienizada
+ 13. Entregar base final: CPF, Nome, Valor Liberado, Telefone, Email
+ 14. Repetir automaticamente a cada 1 hora (parametrizavel)
+
+2.2 Fora de escopo (presumido, a confirmar com o negocio)
+  - Distribuicao da base final para discadores/CRM de operacao (o processo
+    para no "arquivo pronto"; integracao com o sistema que efetivamente usa
+    o lead nao foi descrita e deve ser tratada como fase 2, se existir).
+  - Regras de exclusao adicionais (ex.: telefone na lista "Nao Perturbe",
+    CPF em lista de opt-out, duplicidade entre execucoes horarias).
+  - Tratamento de erros de negocio do Nova Vida (ex.: CPF nao encontrado,
+    telefone nao localizado) alem do simples download do resultado.
+
+================================================================================
+3. ANALISE DE VIABILIDADE TECNICA
+================================================================================
+
+3.1 Premissa central: RPA baseado em interface (UI automation)
+Como nao ha, na especificacao recebida, nenhuma mencao a API/webservice dos
+sistemas Astor Tech e Nova Vida, este estudo assume que a automacao sera feita
+por automacao de navegador (RPA classico), simulando cliques, preenchimento de
+filtros e downloads, exatamente como um operador humano faria.
+
+Isso e tecnicamente viavel e e o padrao de mercado para este tipo de sistema
+(portais de gestao de carteira e servicos de bureau/higienizacao raramente
+expoem API publica para clientes finais). Porem, RPA de UI e estruturalmente
+mais fragil que integracao via API:
+  - Qualquer mudanca visual/estrutural na tela dos sistemas quebra o robo;
+  - Tempos de resposta variam (loading, filas de processamento), exigindo
+    esperas dinamicas e nao apenas "sleep fixo";
+  - Sessao pode expirar, exigindo tratamento de reautenticacao.
+
+RECOMENDACAO: antes de iniciar o desenvolvimento, verificar formalmente junto
+aos fornecedores Astor Tech e Nova Vida se existe API/SFTP/webhook disponivel
+(mesmo que pago ou sob contrato adicional). Isso mudaria a arquitetura para uma
+integracao muito mais robusta, barata de manter e rapida. Caso a resposta seja
+negativa, segue-se com RPA de UI (arquitetura detalhada na secao 5).
+
+3.2 Pontos de atencao especificos por sistema
+
+--- Astor Tech ---
+  - Confirmar se o acesso e via navegador comum (Chrome/Edge) ou aplicativo
+    desktop/Citrix. RPA de UI web (Playwright/Selenium) e mais estavel que
+    RPA de tela (image-based) sobre aplicativos legados ou Citrix.
+  - Confirmar mecanismo de login: usuario/senha simples, MFA (token/SMS/app),
+    certificado digital A1/A3. MFA por SMS/app quebra automacao 100% desatendida
+    e exige solucao alternativa (ver secao 5.4).
+  - Confirmar se existe throttling/bloqueio por multiplas extracoes na mesma
+    hora vindas do mesmo usuario/IP (extrair a cada 1h, 24h/dia, pode disparar
+    regras antifraude do proprio Astor Tech).
+  - O nome do arquivo (UY3_DDMM_PERFILBASE) sugere que "PERFILBASE" e um
+    parametro (ex.: CLT, CLT_PJ, etc.). Confirmar se havera apenas 1 perfil
+    ou multiplos perfis rodando em paralelo (impacta desenho do agendador).
+  - Volume esperado de linhas por extracao/hora (impacta tempo de execucao,
+    memoria e eventual paginacao na tela).
+
+--- Nova Vida ---
+  - Confirmar se o upload e feito manualmente pela tela ou se ha portal de
+    API/SFTP para envio em lote (fornecedores de higienizacao de dados no
+    Brasil comumente oferecem API REST ou SFTP para clientes recorrentes -
+    vale a pena checar comercialmente, pode reduzir o projeto de RPA "duplo"
+    para RPA + integracao).
+  - Tempo de processamento da higienizacao: se for de poucos minutos, o ciclo
+    horario e tranquilo. Se puder levar mais de 1 hora (fila de terceiros),
+    havera sobreposicao de execucoes e o robo precisa de logica de fila
+    (nao iniciar novo ciclo Astor Tech ate o ciclo anterior no Nova Vida
+    terminar, ou paralelizar com controle de concorrencia).
+  - Confirmar formato de saida do arquivo higienizado (CSV? XLSX?) e se as
+    colunas TELEFONE e EMAIL vem sempre preenchidas, podem vir multiplas
+    (telefone1, telefone2...) ou vazias quando nao encontradas.
+
+3.3 Ambiente de execucao
+  - Recomenda-se maquina/VM dedicada (fisica, virtual ou nuvem) com o robo
+    rodando como servico/agendador, sem depender do notebook de um usuario.
+  - Se os sistemas exigirem certificado digital instalado localmente ou IP
+    fixo homologado (comum em sistemas financeiros), a VM precisa ter IP
+    fixo e, se aplicavel, o certificado/token instalado e acessivel ao robo.
+
+================================================================================
+4. STACK TECNOLOGICA - OPCOES E RECOMENDACAO
+================================================================================
+
+Opcao A - RPA de mercado (UiPath / Automation Anywhere / Power Automate Desktop)
+  Pros: estudio visual, selecao de elementos, tratamento de excecao pronto,
+        orquestrador com agendamento, logs e filas nativos, suporte comercial.
+  Contras: custo de licenca (robo attended/unattended + orquestrador),
+        curva de aprendizado especifica da ferramenta.
+  Indicado se a empresa ja usa ou pretende padronizar em uma dessas plataformas.
+
+Opcao B - Codigo sob medida (Python + Playwright, agendado via Windows Task
+Scheduler / cron / servico Windows, ou orquestrado em nuvem)
+  Pros: custo de licenciamento zero, altissima flexibilidade, facil versionar
+        em Git, facil de testar (pytest), leve para rodar em VM pequena.
+  Contras: exige desenvolvedor para manter (nao ha estudio visual "no-code"),
+        tratamento de excecao e logging precisam ser construidos.
+  Indicado para uma automacao pontual como esta, com equipe tecnica disponivel
+  para manutencao. Playwright suporta melhor esperas dinamicas e e mais
+  resistente a mudanca de layout do que Selenium classico.
+
+RECOMENDACAO: Opcao B (Python + Playwright) para este caso, por ser um unico
+fluxo ponta a ponta (nao uma esteira de dezenas de processos), o que nao
+justifica o custo de licenciamento de uma plataforma RPA corporativa. Se a
+Unica Promotora ja possui licenca RPA corporativa ociosa, reavaliar Opcao A.
+
+Componentes complementares sugeridos:
+  - Biblioteca de dados: pandas (leitura/tratamento de Excel/CSV, filtro da
+    coluna N, geracao do CSV final).
+  - Agendamento: Windows Task Scheduler (mais simples) ou um scheduler de
+    processo (ex.: APScheduler) rodando como servico, com trava de execucao
+    (lock file) para impedir sobreposicao de ciclos.
+  - Armazenamento intermediario: pasta de rede ou bucket (S3/Azure Blob) para
+    guardar historico de arquivos brutos, tratados e higienizados (auditoria).
+  - Alertas: integracao com e-mail/Teams/Slack para notificar falhas (login
+    invalido, layout mudou, higienizacao demorou alem do SLA, etc.).
+  - Logs estruturados + monitoramento (ex.: arquivo de log rotativo + painel
+    simples ou envio para ferramenta de observabilidade existente na empresa).
+
+================================================================================
+5. ARQUITETURA PROPOSTA (visao alto nivel)
+================================================================================
+
+  [Scheduler/Trigger horario]
+          |
+          v
+  [Modulo 1: Extracao Astor Tech]
+     - Login (com tratamento de MFA, se houver)
+     - Navegacao ate Painel de Controle / UY3
+     - Aplicacao de filtros (24h; R$4.001,00 a R$8.000,99)
+     - Extrair + salvar arquivo bruto (nome padrao UY3_DDMM_PERFILBASE)
+          |
+          v
+  [Modulo 2: Tratamento de dados]
+     - Ler arquivo bruto
+     - Selecionar colunas I (CPF), R (Nome), N (Valor Liberado)
+     - Filtrar linhas onde Valor Liberado > R$ 4.000,00
+     - Validar/normalizar CPF (formato, digito verificador) - ver secao 7
+     - Gerar CSV separado por virgula
+          |
+          v
+  [Modulo 3: Integracao Nova Vida]
+     - Login
+     - Upload do CSV
+     - Disparo da higienizacao
+     - Polling/espera ate status "concluido" (com timeout e alerta)
+     - Download do arquivo higienizado
+          |
+          v
+  [Modulo 4: Consolidacao e entrega]
+     - Validar colunas finais (CPF, Nome, Valor Liberado, Telefone, Email)
+     - Gravar em local definitivo (pasta/SFTP/banco) com nome/versionamento
+     - Notificar area de operacao (ou disparar proxima automacao, se existir)
+          |
+          v
+  [Modulo 5: Observabilidade]
+     - Log de cada etapa, tempo de execucao, quantidade de registros
+     - Alerta automatico em caso de falha em qualquer modulo
+     - Trava de concorrencia (nao iniciar ciclo novo se o anterior nao terminou)
+
+5.4 Tratamento de autenticacao critica (MFA/Captcha)
+Se qualquer um dos dois sistemas usar MFA (SMS/app) ou captcha, a automacao
+100% desatendida (unattended) fica inviavel nesse ponto especifico. Alternativas:
+  a) Solicitar ao fornecedor um usuario de servico ("usuario robo") isento de
+     MFA/captcha, restrito por IP fixo da VM (pratica comum solicitada a
+     fornecedores B2B para automacao) - CAMINHO RECOMENDADO;
+  b) Usar sessao/token de longa duracao renovado manualmente em intervalo maior
+     (ex.: 1x por semana), caso o fornecedor nao aceite (a) - solucao paliativa;
+  c) Automacao "attended", com o robo parando e pedindo intervencao humana
+     apenas no passo de MFA - perde parte do beneficio de 100% autonomo.
+Este ponto e o maior risco tecnico do projeto e deve ser esclarecido com os
+fornecedores ANTES de estimar prazo/custo final.
+
+================================================================================
+6. RISCOS E MITIGACOES
+================================================================================
+
+ # | Risco                                          | Impacto | Mitigacao
+---|-------------------------------------------------|---------|----------------------------------
+ 1 | Mudanca de layout/tela no Astor Tech ou Nova Vida| Alto    | Selecionar elementos por atributos estaveis (id, name), nao por posicao/imagem; monitoramento com alerta imediato em falha
+ 2 | MFA/Captcha bloqueando execucao desatendida      | Alto    | Negociar usuario de servico com fornecedor; ver secao 5.4
+ 3 | Ciclo do Nova Vida demora mais que 1h             | Medio   | Fila com trava de concorrencia; alertar se SLA estourar; permitir configurar intervalo
+ 4 | Bloqueio por excesso de requisicoes/antifraude    | Medio   | Confirmar limites com fornecedor; espacar levemente o horario de disparo; usar IP fixo homologado
+ 5 | Dados incorretos/CPF invalido apos tratamento     | Medio   | Validacao de digito verificador de CPF antes do envio ao Nova Vida
+ 6 | Vazamento/exposicao de dados pessoais (CPF/tel/e-mail) | Alto | Criptografia em transito e repouso, controle de acesso a pasta de arquivos, retencao minima (ver secao 7)
+ 7 | Indisponibilidade momentanea de um dos sistemas   | Baixo   | Retry com backoff; pular ciclo e alertar; nao acumular falhas silenciosas
+ 8 | Duplicidade de leads entre execucoes horarias     | Medio   | Deduplicar por CPF comparando com execucoes anteriores (janela de 24h, coerente com o filtro "Limite por Periodo")
+ 9 | Dependencia de pessoa-chave para manutencao do robo | Medio | Documentacao tecnica completa + codigo versionado em repositorio Git da empresa
+10 | Mudanca de credenciais/senha expirando            | Baixo   | Cofre de senhas (vault) com rotacao controlada, nao senha fixa em texto no codigo
+
+================================================================================
+7. ASPECTOS LEGAIS E DE COMPLIANCE (LGPD)
+================================================================================
+
+O processo trata dados pessoais (CPF, nome, telefone, e-mail) de forma
+automatizada e recorrente, o que traz obrigacoes sob a Lei Geral de Protecao
+de Dados (LGPD - Lei 13.709/2018):
+
+  - Base legal: confirmar com o Juridico qual base legal ampara a coleta e o
+    enriquecimento (telefone/e-mail) desses dados junto ao Nova Vida para fins
+    de contato comercial (ex.: legitimo interesse, execucao de contrato,
+    consentimento previo dependendo da origem do CPF na base Astor Tech).
+  - Minimizacao de dados: o proprio processo ja aplica esse principio ao
+    manter apenas as colunas estritamente necessarias (CPF, Nome, Valor) antes
+    do envio - boa pratica, manter.
+  - Contrato/DPA com fornecedores: verificar se ha Acordo de Tratamento de
+    Dados (DPA) formal com Astor Tech e Nova Vida, definindo responsabilidades
+    como operador/controlador de dados.
+  - Seguranca: dados em transito devem trafegar via HTTPS (garantido pelos
+    proprios portais); dados em repouso (arquivos CSV gerados pelo robo)
+    devem ficar em pasta com acesso restrito, idealmente criptografados
+    (ex.: BitLocker no disco da VM, ou criptografia do arquivo).
+  - Retencao: definir por quanto tempo os arquivos intermediarios (bruto,
+    tratado, higienizado) ficam armazenados e quando sao expurgados.
+  - Trilha de auditoria: manter logs de quais CPFs foram extraidos/enviados/
+    recebidos em cada execucao, para responder eventual questionamento de
+    titular de dados ou da ANPD.
+  - Regulacao de telemarketing: como a base final e usada por operacao
+    comercial (telefone/e-mail), verificar aderencia a normas setoriais
+    (ex.: listas "Nao Perturbe" municipais/estaduais, se aplicavel ao produto).
+
+RECOMENDACAO: envolver o time Juridico/Compliance da Unica Promotora antes do
+go-live para validar formalmente o enquadramento LGPD do fluxo automatizado
+(ponto que nao pode ser resolvido apenas com engenharia).
+
+================================================================================
+8. ESTIMATIVA DE ESFORCO E CRONOGRAMA (referencial)
+================================================================================
+
+Premissas: 1 desenvolvedor RPA dedicado, sistemas com acesso de teste
+disponibilizado desde o inicio, sem MFA bloqueante (cenario otimista).
+
+  Fase 0 - Descoberta e validacao de premissas          | 3 a 5 dias uteis
+    (confirmar API, MFA, SLA Nova Vida, acesso de teste, aval juridico)
+  Fase 1 - Modulo de extracao Astor Tech                | 5 a 8 dias uteis
+  Fase 2 - Modulo de tratamento de dados                | 2 a 3 dias uteis
+  Fase 3 - Modulo de integracao Nova Vida (upload/poll/download) | 5 a 8 dias uteis
+  Fase 4 - Orquestracao, agendamento, logs e alertas    | 3 a 5 dias uteis
+  Fase 5 - Testes integrados (ciclo completo, casos de erro) | 5 dias uteis
+  Fase 6 - Homologacao com o negocio + ajustes finos    | 3 a 5 dias uteis
+  Fase 7 - Go-live acompanhado + estabilizacao (2 semanas de hipercare)
+
+  TOTAL ESTIMADO: 6 a 9 semanas, dependendo principalmente da Fase 0
+  (se houver MFA/captcha a contornar com o fornecedor, adicionar 1 a 3 semanas
+  de negociacao/implementacao de solucao alternativa).
+
+================================================================================
+9. ESTIMATIVA DE CUSTOS (referencial, a validar com precos reais)
+================================================================================
+
+  - Desenvolvimento (Opcao B, sob medida): baseado no cronograma da secao 8,
+    equivalente a ~1,5 a 2 meses de 1 desenvolvedor pleno/senior em automacao.
+  - Infraestrutura: 1 VM pequena/media (2-4 vCPU, 8GB RAM) para rodar o robo
+    24/7 - custo mensal baixo (nuvem ou on-premise, se ja houver servidor).
+  - Licencas: R$ 0 se optar por Playwright/Python (Opcao B). Se optar por
+    plataforma RPA corporativa (Opcao A), somar custo de licenca de robo
+    unattended + orquestrador (varia por fornecedor).
+  - Eventual custo comercial adicional junto a Nova Vida/Astor Tech, caso a
+    negociacao de "usuario de servico" ou API exija plano/contrato diferente
+    do atual (a confirmar comercialmente).
+  - Manutencao continua: reservar capacidade de suporte (ex.: algumas horas/mes)
+    para ajustar o robo caso os sistemas mudem de layout - custo recorrente
+    inerente a qualquer RPA de UI.
+
+================================================================================
+10. BENEFICIOS ESPERADOS (retorno)
+================================================================================
+
+  - Reducao do tempo entre geracao do lead e disponibilizacao para operacao,
+    de um ciclo manual (horas, dependendo da disponibilidade do operador) para
+    um ciclo automatico de ate 1 hora, 24 horas por dia, 7 dias por semana.
+  - Eliminacao de tarefa manual repetitiva, liberando a pessoa hoje responsavel
+    para atividades de maior valor agregado.
+  - Padronizacao total do processo (mesmos filtros, mesmas colunas, mesmo
+    layout final sempre), reduzindo erro humano de digitacao/selecao.
+  - Rastreabilidade: logs automaticos de cada execucao (util para auditoria e
+    para diagnostico rapido em caso de problema).
+  - Escalabilidade: se o volume de leads crescer, o robo absorve sem aumento
+    proporcional de esforco operacional.
+
+================================================================================
+11. PRE-REQUISITOS ANTES DE INICIAR O DESENVOLVIMENTO
+================================================================================
+
+  [ ] Acesso de teste/homologacao a Astor Tech e Nova Vida (usuario dedicado)
+  [ ] Confirmacao do fornecedor sobre existencia de API/SFTP
+  [ ] Confirmacao do mecanismo de autenticacao (MFA? Captcha? Certificado?)
+  [ ] Definicao de "usuario de servico" isento de MFA, se possivel, com IP fixo
+  [ ] Confirmacao do SLA real de processamento no Nova Vida
+  [ ] Confirmacao do formato exato de saida do Nova Vida (CSV/XLSX, colunas)
+  [ ] Validacao juridica/LGPD do fluxo (base legal, retencao, DPA fornecedores)
+  [ ] Definicao do destino final da base (pasta de rede, sistema de discagem,
+      CRM, etc.) e do formato de notificacao para a operacao
+  [ ] Definicao de ambiente (VM dedicada) e responsavel por sustentacao do robo
+
+================================================================================
+12. CONCLUSAO E RECOMENDACAO FINAL
+================================================================================
+
+O projeto e VIAVEL e traz ganho operacional claro, com escopo bem definido e
+processo hoje ja mapeado passo a passo pela area de negocio - o que reduz
+bastante o risco de levantamento de requisitos.
+
+O maior risco nao e tecnico-programatico, e sim de DEPENDENCIA EXTERNA:
+autenticacao (MFA/captcha) e SLA de terceiros. Recomenda-se iniciar
+IMEDIATAMENTE a Fase 0 (descoberta/validacao de premissas junto aos
+fornecedores Astor Tech e Nova Vida e ao Juridico), em paralelo a qualquer
+outra decisao, pois ela e o fator que mais influencia prazo e custo final.
+
+Caminho recomendado:
+  1. Validar premissas criticas (Fase 0) antes de qualquer estimativa comercial
+     fechada.
+  2. Desenvolver em Python + Playwright (Opcao B), por ser um fluxo unico e
+     bem delimitado, evitando custo de licenciamento RPA corporativo.
+  3. Envolver Juridico/Compliance desde o inicio para o enquadramento LGPD.
+  4. Rodar piloto em paralelo ao processo manual por 1 a 2 semanas antes do
+     desligamento definitivo da operacao manual, comparando resultados.
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

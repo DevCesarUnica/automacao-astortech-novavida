@@ -1,0 +1,213 @@
+================================================================================
+AUTOMACAO ASTOR TECH -> NOVA VIDA
+Orientacoes do Processo
+================================================================================
+
+1. OBJETIVO
+--------------------------------------------------------------------------------
+Desenvolver um robo para automatizar todo o processo de extracao, tratamento e
+higienizacao das bases entre os sistemas Astor Tech e Nova Vida.
+
+O robo devera executar o processo automaticamente em intervalos programados
+(sugestao: a cada 1 hora), eliminando a necessidade de operacao manual.
+
+2. FLUXO GERAL
+--------------------------------------------------------------------------------
+1. Acessar o sistema Astor Tech.
+2. Aplicar os filtros padrao.
+3. Extrair a base.
+4. Tratar o arquivo (remover colunas desnecessarias).
+5. Gerar arquivo CSV.
+6. Enviar automaticamente para o sistema Nova Vida.
+7. Aguardar a higienizacao.
+8. Baixar a base higienizada.
+9. Entregar a base final no layout definido.
+
+3. SISTEMAS ENVOLVIDOS
+--------------------------------------------------------------------------------
+Sistema de Origem: Astor Tech
+  - Responsavel pela geracao da base de clientes.
+
+Sistema de Destino: Nova Vida
+  - Responsavel pela higienizacao e enriquecimento dos dados.
+
+4. FREQUENCIA DE EXECUCAO
+--------------------------------------------------------------------------------
+O processo devera ser executado automaticamente.
+
+Periodicidade sugerida:
+  - A cada 1 hora.
+
+A frequencia podera ser parametrizada futuramente, caso necessario.
+
+5. PROCESSO DE EXTRACAO (ASTOR TECH)
+--------------------------------------------------------------------------------
+Caminho de navegacao:
+  Menu lateral: Gestao de Carteira -> Analise -> Painel de Controle
+  Em seguida: Tipo de Consulta -> Selecionar UY3
+
+Filtros obrigatorios:
+  - Limite por Periodo: 24 Horas
+  - Valor Liberado: De R$ 4.001,00 ate R$ 8.000,99
+
+Apos aplicar os filtros:
+  - Clicar em "Atualizar Filtros"
+  - Clicar em "Extrair"
+
+Nome do arquivo (padrao):
+  UY3_DDMM_PERFILBASE
+  Exemplo: UY3_1507_CLT
+
+6. TRATAMENTO DA BASE
+--------------------------------------------------------------------------------
+Apos a extracao, o robo devera remover todas as colunas que nao serao
+utilizadas. Devem permanecer apenas os seguintes dados da base original:
+
+  Coluna | Campo
+  -------|----------------
+    I    | CPF
+    R    | Nome
+    N    | Valor Liberado
+
+7. REGRAS DE NEGOCIO
+--------------------------------------------------------------------------------
+Antes da integracao com o Nova Vida, considerar apenas registros cujo Valor
+Liberado seja superior a R$ 4.000,00.
+
+O valor utilizado para essa validacao encontra-se na Coluna N.
+
+8. GERACAO DO ARQUIVO
+--------------------------------------------------------------------------------
+Apos o tratamento, gerar arquivo em CSV, separado por virgulas (,).
+
+9. INTEGRACAO COM O NOVA VIDA
+--------------------------------------------------------------------------------
+Apos gerar o CSV, o robo devera:
+  1. Acessar o sistema Nova Vida.
+  2. Realizar login (caso necessario).
+  3. Efetuar o upload automatico do arquivo CSV.
+  4. Iniciar o processo de higienizacao.
+  5. Aguardar o termino do processamento.
+  6. Baixar automaticamente a base higienizada.
+
+10. LAYOUT ESPERADO DA BASE FINAL
+--------------------------------------------------------------------------------
+Apos a higienizacao, o arquivo final devera conter apenas as seguintes colunas:
+
+  Ordem | Campo
+  ------|----------------
+    1   | CPF
+    2   | NOME
+    3   | VALOR LIBERADO
+    4   | TELEFONE
+    5   | EMAIL
+
+11. OBJETIVO DA AUTOMACAO
+--------------------------------------------------------------------------------
+Atualmente o processo e realizado manualmente, seguindo as etapas:
+  - Extracao da base.
+  - Tratamento do arquivo.
+  - Exclusao de colunas.
+  - Envio para higienizacao.
+  - Recebimento da base tratada.
+
+Esse fluxo gera atrasos entre a geracao do lead e sua disponibilizacao para
+operacao.
+
+Com a automacao espera-se:
+  - Reducao do tempo operacional.
+  - Eliminacao de tarefas manuais.
+  - Padronizacao do processo.
+  - Menor risco de erro humano.
+  - Disponibilizacao mais rapida dos leads para a operacao.
+
+12. RESULTADO ESPERADO
+--------------------------------------------------------------------------------
+Ao final da execucao, o robo devera entregar automaticamente uma base pronta
+para utilizacao contendo:
+  - CPF
+  - Nome
+  - Valor Liberado
+  - Telefone
+  - E-mail
+
+Todo o processo devera ocorrer sem intervencao manual, desde a extracao no
+Astor Tech ate a obtencao da base higienizada pelo Nova Vida.
+
+13. CONFIRMACOES DE CAMPO (mapeamento ao vivo)
+--------------------------------------------------------------------------------
+Astor Tech (confirmado ao vivo em 17/07/2026):
+  - Caminho real do menu: Analise -> Painel de Controle (nao "Gestao de
+    Carteira -> Analise -> Painel de Controle" como descrito na secao 5).
+  - Tipo de Consulta disponivel no ambiente testado: "Banco UY3 CLT" (unica
+    opcao no dropdown).
+  - Nomes de botao atuais na tela: "Consultar" e "Exportar" (o documento
+    descreve "Atualizar Filtros" e "Extrair" - nomes desatualizados).
+  - Filtros "Limite por Periodo: 24 Horas" e "Valor Liberado: R$4.001,00 a
+    R$8.000,99" (secao 5) CONFIRMADO QUE NAO EXISTEM no bloco de Filtros da
+    tela desta conta. O dropdown "Campo" foi reaberto e todas as opcoes
+    foram listadas via DOM (nao so o que aparecia visualmente): UF, DDD,
+    Sexo, Idade, Banco, Data Nascimento, Data Consulta, Tem Telefone,
+    Status do Telefone - sao 9 opcoes ao todo, nenhuma delas e "Valor
+    Liberado" nem um filtro de periodo/data de liberacao. Como so havia um
+    Tipo de Consulta disponivel ("Banco UY3 CLT"), nao foi possivel testar
+    se outro tipo de consulta teria esse filtro. A regra de valor (secao 7)
+    e aplicada de qualquer forma no tratamento via pandas sobre a base
+    bruta completa, entao o resultado final fica correto mesmo sem o
+    pre-filtro na origem - so a extracao bruta traz mais linhas do que o
+    necessario.
+  - Consulta real (clicar em "Consultar"/"Exportar") pode ter custo por CPF
+    retornado (bureau de dados) - NAO EXECUTADA ainda, pendente de
+    autorizacao explicita do usuario para teste com custo real.
+
+Nova Vida (URL confirmada pelo usuario em 17/07/2026):
+  - URL: https://ipe.novavidati.com.br/IndicadoresGerais
+  - Formulario de login (Plataforma Ipe da Nova Vida TI) tem 3 campos:
+    Usuario, Senha, Cliente (empresa = "UNICA_PROMOTORA").
+  - Tentativa de login com a URL antiga (/Home/Login, encontrada via busca,
+    nao confirmada) resultou em pagina em branco/404 - por isso o usuario
+    forneceu a URL correta acima.
+  - Exploracao do ambiente (sem gerar custo/upload real) autorizada pelo
+    usuario em 17/07/2026.
+
+  Tela "Enriquecimentos" (menu lateral -> Enriquecimentos, URL
+  /Enriquecimento) - onde de fato ocorre o upload/higienizacao:
+    - Lista "Enriquecimentos recentes" com historico: ID, Arquivo, Entrada
+      (qtd. registros enviados), Saida (qtd. enriquecidos), Data/Tempo,
+      Status ("Exportado"). Nomes de arquivo ja vistos no historico real:
+      UY3_NVV_1407.csv, NOVA_VIDA_1207.csv, BASE_UY3.csv, UY3_110726.csv -
+      compativel com o padrao "UY3_DDMM_PERFILBASE" da secao 5.
+    - Botao "Adicionar" abre o modal "Novo enriquecimento" com os campos:
+        Cliente (fixo, somente leitura: "UNICA_PROMOTORA")
+        Usuario (fixo, somente leitura: email logado)
+        Campanha       (select id=campanhaselect; opcao existente:
+                         "CLT_UY3_1207"; tem botao "+" para criar nova)
+        Subcampanha    (select id=subcampanha; tem botao "+" para criar nova)
+        Processo       (select id=processo; opcoes vistas: CLT PLUS,
+                         CLTFULL+BANCOS, NEXT_CLT, NVBOOK - ATRIB NOME,
+                         NVBOOK ATRIB TELEFONE,
+                         NVBOOK CEL OBG - BESTTIMETOCALL, NVBOOK_PJ,
+                         NVCONSIG, SCORE_CLT_COMPLETO - FL_BESTTIME)
+        Layout de entrada (select id=layoutEntrada; opcoes incluem "(PF)
+                         PADRAO NV", "ENTRADA NOME CIDADE UF", "ENTRADA
+                         TELEFONE ATRIB", "CPF ; CNPJ", entre outras)
+        Layout de saida   (select id=layoutSaida; opcoes incluem "SAIDA
+                         NVBOOK", "SAIDA_NVCONSIG", varias por banco
+                         (BANCO C6, BANCO BMG, BANCO FACTA etc.))
+        Area de upload  (arrastar-e-soltar ou input type=file)
+        Botoes: "Iniciar job" (dispara o enriquecimento - EFEITO REAL/
+                 possivel custo) e "Cancelar".
+    - NAO CONFIRMADO ainda (pendente de decisao do usuario/negocio, pois
+      afeta dados e possivelmente custo): qual Campanha/Subcampanha,
+      Processo e par de Layouts (entrada/saida) devem ser usados pela
+      automacao para bater com o layout final esperado (secao 10: CPF,
+      NOME, VALOR LIBERADO, TELEFONE, EMAIL). Nenhum job foi iniciado
+      durante a exploracao - o modal foi aberto e fechado via "Cancelar"
+      sem soltar arquivo nem clicar "Iniciar job".
+    - Download do resultado: cada linha do historico tem um botao/icone
+      "Download Alternativo" (nao testado - abrir baixaria dados reais de
+      clientes ja processados, o que nao foi autorizado nesta exploracao).
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

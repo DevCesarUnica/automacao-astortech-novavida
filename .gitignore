@@ -1,0 +1,35 @@
+# Credenciais e segredos - NUNCA versionar
+.env
+*.env
+!.env.example
+
+# Dados reais de clientes / exports (PII) - NUNCA versionar
+data/raw/*
+data/treated/*
+data/final/*
+!data/raw/.gitkeep
+!data/treated/.gitkeep
+!data/final/.gitkeep
+EXEMPLO_EXTRA*.csv
+*.xlsx
+*.xls
+
+# Logs (podem conter caminhos locais e stack traces)
+logs/*
+!logs/.gitkeep
+
+# Evidencias de exploracao (screenshots/HTML podem conter dados reais de clientes)
+explore/screenshots/*
+explore/dumps/*
+!explore/screenshots/.gitkeep
+!explore/dumps/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Ferramentas locais (nao fazem parte do produto)
+.claude/
+orchestrator.lock
