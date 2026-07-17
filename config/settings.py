@@ -36,8 +36,10 @@ INTERVALO_HORAS = float(os.environ.get("INTERVALO_HORAS", "1"))
 ASTOR_TIPO_CONSULTA = "Banco UY3 CLT"
 
 # Colunas do arquivo bruto exportado pelo Astor Tech, conforme especificacao
-# do processo (letras de coluna estilo Excel). NAO CONFIRMADO contra um
-# arquivo real ainda (Fase 0 nao concluida - ver README/TODO).
+# do processo (letras de coluna estilo Excel). CONFIRMADO contra um arquivo
+# real em 17/07/2026 (export "UY3_1707_CLT", 4985 linhas): indice 8 (I) =
+# registration_number/CPF, indice 13 (N) = liquid_value/Valor Liberado,
+# indice 17 (R) = employee_name/Nome. Ver docstring de src/data_treatment.py.
 COLUNA_CPF = "I"
 COLUNA_NOME = "R"
 COLUNA_VALOR_LIBERADO = "N"

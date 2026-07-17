@@ -141,24 +141,55 @@ Astor Tech (confirmado ao vivo em 17/07/2026):
     Carteira -> Analise -> Painel de Controle" como descrito na secao 5).
   - Tipo de Consulta disponivel no ambiente testado: "Banco UY3 CLT" (unica
     opcao no dropdown).
-  - Nomes de botao atuais na tela: "Consultar" e "Exportar" (o documento
-    descreve "Atualizar Filtros" e "Extrair" - nomes desatualizados).
-  - Filtros "Limite por Periodo: 24 Horas" e "Valor Liberado: R$4.001,00 a
-    R$8.000,99" (secao 5) CONFIRMADO QUE NAO EXISTEM no bloco de Filtros da
-    tela desta conta. O dropdown "Campo" foi reaberto e todas as opcoes
-    foram listadas via DOM (nao so o que aparecia visualmente): UF, DDD,
-    Sexo, Idade, Banco, Data Nascimento, Data Consulta, Tem Telefone,
-    Status do Telefone - sao 9 opcoes ao todo, nenhuma delas e "Valor
-    Liberado" nem um filtro de periodo/data de liberacao. Como so havia um
-    Tipo de Consulta disponivel ("Banco UY3 CLT"), nao foi possivel testar
-    se outro tipo de consulta teria esse filtro. A regra de valor (secao 7)
-    e aplicada de qualquer forma no tratamento via pandas sobre a base
-    bruta completa, entao o resultado final fica correto mesmo sem o
-    pre-filtro na origem - so a extracao bruta traz mais linhas do que o
-    necessario.
-  - Consulta real (clicar em "Consultar"/"Exportar") pode ter custo por CPF
-    retornado (bureau de dados) - NAO EXECUTADA ainda, pendente de
-    autorizacao explicita do usuario para teste com custo real.
+  - CORRECAO (17/07/2026, apos o usuario descrever o fluxo completo): a
+    tentativa anterior de localizar "Limite por Periodo: 24 Horas" e "Valor
+    Liberado: R$4.001,00 a R$8.000,99" no dropdown "Campo" do bloco de
+    Filtros dinamico (Campo/Condicao/Valor) do Painel de Controle NAO
+    encontrou esses filtros porque eles nao ficam ali - a suposicao de que
+    "nao existem no sistema" estava errada. Eles ficam em uma TABELA DE
+    FILTROS RAPIDOS separada, no final da pagina, que so aparece DEPOIS de
+    rodar uma consulta real (por isso a exploracao anterior, que nunca
+    clicou em "Consultar" de verdade, nao os encontrou). O fluxo completo,
+    conforme descrito pelo usuario:
+      1. Analise -> Painel de Controle.
+      2. Campo "Tipo da Consulta" -> "Banco UY3 CLT".
+      3. Clicar em "Consultar" (topo - dispara a consulta real).
+      4. Rolar ate o fim da pagina: tabela com linhas como
+         "R$4001,00 a R$8000,99" (faixa de Valor Liberado) e "<= 24 HORAS"
+         (faixa de tempo) - selecionar as duas.
+      5. Clicar em "Atualizar Filtros" (botao separado do "Consultar" do
+         topo - ao contrario do que a exploracao anterior assumiu, ESSE
+         botao existe de fato e reaplica a consulta com os filtros
+         selecionados).
+      6. Clicar em "Exportar" (topo) - abre um dialogo pedindo o NOME da
+         planilha (nao baixa direto).
+      7. Preencher o nome no padrao "UY3_DDMM_PERFILBASE" (ex.:
+         UY3_1707_CLT) e clicar em "Baixar Base" - isso enfileira a geracao
+         do arquivo (processo assincrono do lado do Astor Tech).
+      8. Ir em "Exportacoes" (menu lateral, /analise/exportacoes), localizar
+         a linha com o nome usado no passo 7, abrir o menu de 3 pontos e
+         clicar em "Download" para baixar o arquivo de fato.
+    Implementado em src/astor_extraction.py com base nessa descricao.
+  - CONFIRMADO ao vivo em 17/07/2026 (tela /analise/exportacoes visitada
+    diretamente - so lista exportacoes ja existentes, NAO dispara consulta
+    nova, sem custo):
+      Colunas da tabela: ID, Data Criacao, Data Finalizacao, Usuario, Nome
+      do Arquivo, Qtd. Solicitada, Qtd. Entregue, Status, Acao.
+      Coluna "Acao" tem exatamente 1 botao por linha (icone de 3 pontos).
+      Clicar nele abre um menu com 2 itens: "Download" e "Excluir". Menu
+      fechado com Escape sem clicar em "Download" durante a exploracao,
+      para nao baixar dados reais de clientes desnecessariamente. Bate
+      exatamente com o que ja estava implementado em
+      _baixar_de_exportacoes() (src/astor_extraction.py).
+  - AINDA SEM validacao ao vivo ponta a ponta do fluxo completo (ver
+    docstring do modulo para o que fica assumido/nao verificado): como
+    exatamente se seleciona uma linha da tabela de filtros rapidos (passo 4
+    acima) e o seletor do input de nome no dialogo de Exportar (passo 7).
+    Esses dois pontos so podem ser confirmados rodando uma consulta real
+    (com custo).
+  - Consulta real (clicar em "Consultar") pode ter custo por CPF retornado
+    (bureau de dados) - NAO EXECUTADA ainda, pendente de autorizacao
+    explicita do usuario para teste com custo real.
 
 Nova Vida (URL confirmada pelo usuario em 17/07/2026):
   - URL: https://ipe.novavidati.com.br/IndicadoresGerais
@@ -207,6 +238,88 @@ Nova Vida (URL confirmada pelo usuario em 17/07/2026):
     - Download do resultado: cada linha do historico tem um botao/icone
       "Download Alternativo" (nao testado - abrir baixaria dados reais de
       clientes ja processados, o que nao foi autorizado nesta exploracao).
+
+14. STATUS ATUAL DA IMPLEMENTACAO (17/07/2026)
+--------------------------------------------------------------------------------
+Repositorio: https://github.com/DevCesarUnica/automacao-astortech-novavida
+(publico; README.md la tem instrucoes de instalacao/uso/configuracao).
+
+O QUE JA ESTA CODADO E FUNCIONA:
+  - Login no Astor Tech e no Nova Vida (src/astor_extraction.py,
+    src/novavida_integration.py).
+  - FLUXO COMPLETO DE EXTRACAO NO ASTOR TECH TESTADO DE PONTA A PONTA COM
+    SUCESSO em 17/07/2026 (autorizado explicitamente pelo usuario, que
+    confirmou nao haver custo real nesse ambiente/plano): login ->
+    Painel de Controle -> Tipo da Consulta "Banco UY3 CLT" -> Consultar ->
+    selecao dos 2 filtros rapidos (Valor Liberado + Limite por Periodo) ->
+    Atualizar Filtros -> Exportar -> nomear "UY3_1707_CLT" -> Baixar Base ->
+    aguardar status "CONCLUIDO" em Exportacoes -> Download. Export real com
+    4985 registros baixado com sucesso (arquivo .zip com CSV interno
+    separado por ";"). Tres bugs encontrados e corrigidos durante o teste
+    (detalhes na docstring de src/astor_extraction.py):
+      1. Selecionar um filtro rapido exige clicar no radio button da linha,
+         nao no texto da celula (clicar no texto nao registra a selecao).
+      2. E preciso aguardar o STATUS da linha em Exportacoes virar
+         "CONCLUIDO" antes de baixar - baixar com status "EM PROCESSAMENTO"
+         retorna um JSON de erro em vez do arquivo.
+      3. Overlays residuais podem interceptar o clique no menu de 3 pontos
+         apos recarregar a pagina varias vezes (agora tratado com
+         close_overlays() antes do clique).
+  - Tratamento da base (src/data_treatment.py) TAMBEM VALIDADO com o
+    arquivo real acima: 4985 linhas brutas -> 0 CPFs invalidos -> 4985
+    linhas finais. Confirma que o layout de colunas I/R/N do processo
+    original bate exatamente com o arquivo real (ver secao 13 e docstring
+    do modulo). O arquivo tratado final fica em
+    data/treated/UY3_1707_CLT_tratado.csv (contem dados reais de clientes -
+    pasta git-ignorada).
+  - Tela "Enriquecimentos" e modal "Novo enriquecimento" do Nova Vida
+    mapeados, incluindo todas as opcoes de Campanha/Processo/Layouts
+    disponiveis (ver secao 13) - SEM disparar nenhum job real (ver abaixo).
+  - Orquestracao (src/orchestrator.py): trava de concorrencia (lock),
+    deduplicacao contra historico de CPFs das ultimas 24h, logging
+    estruturado com rotacao de arquivo.
+
+O QUE AINDA NAO FOI EXECUTADO DE PONTA A PONTA:
+  - Disparo do job de enriquecimento no Nova Vida (upload + "Iniciar job")
+    - implementado mas propositalmente bloqueado (ver abaixo); o teste real
+      de 17/07/2026 cobriu APENAS a parte do Astor Tech, por instrucao
+      explicita do usuario ("so execute a parte do astor").
+  - Download automatico do resultado higienizado do Nova Vida - ainda nem
+    foi mapeado (botao "Download Alternativo" nunca foi clicado).
+
+TRAVAS DE SEGURANCA (para nao gerar custo/efeito real sem autorizacao):
+  - astor_extraction.extrair(permitir_consulta_real=False por padrao) -
+    recusa rodar o fluxo real no Astor Tech.
+  - novavida_integration.upload_e_higienizar(permitir_job_real=False por
+    padrao) - preenche e valida o modal, mas cancela antes de clicar em
+    "Iniciar job".
+  - orchestrator.py expoe as duas travas via CLI:
+    --permitir-consulta-real e --permitir-novavida-job-real.
+
+DECISOES DE NEGOCIO PENDENTES (bloqueiam a automacao completa ate serem
+respondidas):
+  1. [CONCLUIDO em 17/07/2026] Autorizar um teste real no Astor Tech - feito,
+     ver resultado acima. Extracao + tratamento validados de ponta a ponta.
+  2. Definir, no Nova Vida, qual Campanha, Subcampanha, Processo e par de
+     Layouts (entrada/saida) a automacao deve usar no modal "Novo
+     enriquecimento" (ver lista de opcoes na secao 13). Sem isso, o codigo
+     recusa disparar qualquer job (config/settings.py:
+     NOVAVIDA_CAMPANHA/NOVAVIDA_PROCESSO/NOVAVIDA_LAYOUT_ENTRADA/
+     NOVAVIDA_LAYOUT_SAIDA ficam vazias ate serem preenchidas no .env).
+  3. Mapear e autorizar o download do resultado higienizado no Nova Vida
+     (tela Enriquecimentos, botao "Download Alternativo").
+
+RESULTADO DO TESTE REAL DE 17/07/2026 (dados ficam localmente, NAO
+versionados - pastas data/raw e data/treated sao git-ignoradas):
+  - data/raw/UY3_1707_CLT.zip - export bruto real do Astor Tech (4985
+    registros de clientes: CPF, nome, valores, datas de nascimento etc.).
+  - data/treated/UY3_1707_CLT_tratado.csv - apos tratamento (CPF, Nome,
+    Valor Liberado; 4985 linhas, todas validas).
+  - Esses arquivos contem dados reais de clientes e NAO foram enviados ao
+    Nova Vida (por instrucao explicita do usuario, que restringiu o teste
+    a "so a parte do astor"). Ficam no disco local ate o usuario decidir se
+    quer mante-los, apaga-los, ou seguir o fluxo (o que depende da decisao
+    2 acima).
 
 ================================================================================
 FIM DO DOCUMENTO

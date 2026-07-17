@@ -4,6 +4,20 @@ Le o arquivo bruto exportado do Astor Tech, mantem apenas as colunas
 I (CPF), R (Nome), N (Valor Liberado), aplica a regra de negocio
 Valor Liberado > R$4.000,00 e gera o CSV separado por virgula para envio
 ao Nova Vida.
+
+CONFIRMADO com arquivo real em 17/07/2026 (export "UY3_1707_CLT", 4985
+linhas, teste de ponta a ponta - ver docstring de src/astor_extraction.py):
+  - O arquivo bruto entregue pelo Astor Tech e um .zip contendo um unico
+    CSV separado por ";". _ler_arquivo_bruto() ja funciona sem alteracao:
+    pandas.read_csv(sep=None, engine="python") detecta automaticamente a
+    compressao (pelo sufixo .zip) e o separador.
+  - O layout de colunas I/R/N do processo bateu exatamente com o arquivo
+    real, contando letras de coluna estilo Excel (A=1, B=2, ...): indice 8
+    ("I") = "registration_number" (CPF), indice 13 ("N") = "liquid_value"
+    (Valor Liberado, ja em reais), indice 17 ("R") = "employee_name"
+    (Nome). Resultado do teste: 4985 linhas brutas -> 0 CPFs invalidos ->
+    4985 linhas finais (todas ja vinham com Valor Liberado dentro da faixa
+    filtrada na origem).
 """
 from __future__ import annotations
 
