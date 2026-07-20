@@ -228,18 +228,40 @@ Nova Vida (URL confirmada pelo usuario em 17/07/2026):
         Area de upload  (arrastar-e-soltar ou input type=file)
         Botoes: "Iniciar job" (dispara o enriquecimento - EFEITO REAL/
                  possivel custo) e "Cancelar".
-    - NAO CONFIRMADO ainda (pendente de decisao do usuario/negocio, pois
-      afeta dados e possivelmente custo): qual Campanha/Subcampanha,
-      Processo e par de Layouts (entrada/saida) devem ser usados pela
-      automacao para bater com o layout final esperado (secao 10: CPF,
-      NOME, VALOR LIBERADO, TELEFONE, EMAIL). Nenhum job foi iniciado
-      durante a exploracao - o modal foi aberto e fechado via "Cancelar"
-      sem soltar arquivo nem clicar "Iniciar job".
-    - Download do resultado: cada linha do historico tem um botao/icone
-      "Download Alternativo" (nao testado - abrir baixaria dados reais de
-      clientes ja processados, o que nao foi autorizado nesta exploracao).
+    - [RESOLVIDO em 20/07/2026] Decisao de negocio sobre qual Campanha/
+      Processo usar: Campanha = "CLT_UY3_1207" (value 6028), Processo =
+      "NVBOOK CEL OBG - BESTTIMETOCALL" (value 1581). Definido em
+      config/settings.py (NOVAVIDA_CAMPANHA/NOVAVIDA_PROCESSO), lido do
+      .env.
+    - CORRECAO (20/07/2026, apos inspecao ao vivo do HTML real do modal):
+      Layout de entrada e Layout de saida NAO precisam de selecao manual -
+      sao campos "required" mas com todas as opcoes marcadas
+      "style=display:none" exceto a(s) que casa(m) com o Processo
+      escolhido (via atributo data-procedimento/data-layout em cada
+      <option>). O proprio JS do site filtra e AUTO-SELECIONA a opcao
+      unica assim que o Processo muda - confirmado lendo o valor dos
+      selects apos escolher Processo=1581: layoutEntrada vira "2" ((PF)
+      PADRAO NV), layoutSaida vira "3955" (SAIDA). Por isso
+      src/novavida_integration.py so seleciona Campanha e Processo.
+    - CORRECAO (20/07/2026): a area de upload usa uma dropzone
+      (Dropzone.js, .upload-file__dropzone) cujo <input type="file"> real
+      (.dz-hidden-input) NAO fica dentro do DOM do modal - fica anexado
+      direto na pagina, com visibility:hidden. Um seletor que procura
+      input[type=file] so dentro do modal (como a suposicao original)
+      nunca encontra o elemento e da timeout.
+    - Fluxo completo ATE "Iniciar job" testado ao vivo em 20/07/2026 em
+      modo seguro (permitir_job_real=False - preenche tudo e cancela, sem
+      custo): login -> Enriquecimentos -> Adicionar -> Campanha ->
+      Processo -> upload do arquivo. Funcionou de ponta a ponta.
+    - Download do resultado: cada linha da lista de Enriquecimentos tem um
+      icone <span class="material-icons">download</span> na coluna de
+      acao. AINDA NAO TESTADO ao vivo (exige clicar "Iniciar job" de
+      verdade, com possivel custo, e esperar o job concluir) - o matching
+      de qual linha/quando esta pronta para download em
+      src/novavida_integration.py._baixar_resultado() e uma suposicao a
+      confirmar no proximo teste real autorizado.
 
-14. STATUS ATUAL DA IMPLEMENTACAO (17/07/2026)
+14. STATUS ATUAL DA IMPLEMENTACAO (atualizado em 20/07/2026)
 --------------------------------------------------------------------------------
 Repositorio: https://github.com/DevCesarUnica/automacao-astortech-novavida
 (publico; README.md la tem instrucoes de instalacao/uso/configuracao).
@@ -279,13 +301,45 @@ O QUE JA ESTA CODADO E FUNCIONA:
     deduplicacao contra historico de CPFs das ultimas 24h, logging
     estruturado com rotacao de arquivo.
 
+SEGUNDO TESTE REAL NO ASTOR TECH (20/07/2026, autorizado explicitamente pelo
+usuario): novo ciclo completo de extracao + tratamento, export "UY3_2007_CLT"
+com 3814 registros solicitados/entregues, 3812 linhas finais apos tratamento
+(0 CPFs invalidos, 1 duplicata removida). Confirma que o fluxo de 17/07/2026
+e repetivel. Durante o download desse segundo teste, um overlay residual
+(.cdk-overlay-backdrop) bloqueou o clique no menu de 3 pontos na primeira
+tentativa (mesma classe de problema ja tratada por close_overlays(), mas
+reapareceu apos varios reloads); recuperado com uma segunda tentativa
+chamando close_overlays() em loop ate a contagem de overlays zerar antes do
+clique - considerar aplicar esse retry-loop dentro de
+_baixar_de_exportacoes() se o problema se repetir.
+
+BUG ENCONTRADO E CORRIGIDO (20/07/2026): a coluna "Valor Liberado" do
+tratamento (src/data_treatment.py) estava sendo gerada 100x maior que o
+valor real (ex.: 5001.59 virava 500159). Causa: o codigo assumia que a
+coluna viria como STRING de moeda formatada em pt-BR ("R$ 5.001,59") e
+aplicava replace(".", "") + replace(",", ".") para limpar - mas o export
+real do Astor Tech ja entrega a coluna como NUMERO decimal puro (ex.
+5001.59, ponto = separador decimal mesmo), entao a limpeza apagava o ponto
+decimal por engano. Corrigido com _parse_valor_liberado(), que so aplica a
+limpeza de string quando a coluna nao vier ja numerica. Esse bug afetava
+TODOS os arquivos tratados ate entao, incluindo o teste de 17/07/2026 -
+ambos foram reprocessados corretamente apos a correcao.
+
+NOVA VIDA MAPEADO E VALIDADO EM MODO SEGURO (20/07/2026): fluxo login ->
+Enriquecimentos -> Adicionar -> selecionar Campanha/Processo -> anexar
+arquivo testado ao vivo com permitir_job_real=False (preenche tudo e
+cancela, sem custo). Ver secao 13 para os detalhes/correcoes de selector
+(Layout Entrada/Saida auto-preenchidos, input de upload fora do modal).
+
 O QUE AINDA NAO FOI EXECUTADO DE PONTA A PONTA:
   - Disparo do job de enriquecimento no Nova Vida (upload + "Iniciar job")
-    - implementado mas propositalmente bloqueado (ver abaixo); o teste real
-      de 17/07/2026 cobriu APENAS a parte do Astor Tech, por instrucao
-      explicita do usuario ("so execute a parte do astor").
-  - Download automatico do resultado higienizado do Nova Vida - ainda nem
-    foi mapeado (botao "Download Alternativo" nunca foi clicado).
+    - implementado mas propositalmente bloqueado (ver traves abaixo);
+      pendente de autorizacao explicita do usuario para teste com custo
+      real.
+  - Download automatico do resultado higienizado do Nova Vida - selector
+    (icone "download" na lista de Enriquecimentos) mapeado via inspecao do
+    HTML, mas o comportamento real (tempo de processamento, como
+    identificar a linha certa) so pode ser confirmado rodando um job real.
 
 TRAVAS DE SEGURANCA (para nao gerar custo/efeito real sem autorizacao):
   - astor_extraction.extrair(permitir_consulta_real=False por padrao) -
@@ -300,26 +354,40 @@ DECISOES DE NEGOCIO PENDENTES (bloqueiam a automacao completa ate serem
 respondidas):
   1. [CONCLUIDO em 17/07/2026] Autorizar um teste real no Astor Tech - feito,
      ver resultado acima. Extracao + tratamento validados de ponta a ponta.
-  2. Definir, no Nova Vida, qual Campanha, Subcampanha, Processo e par de
-     Layouts (entrada/saida) a automacao deve usar no modal "Novo
-     enriquecimento" (ver lista de opcoes na secao 13). Sem isso, o codigo
-     recusa disparar qualquer job (config/settings.py:
-     NOVAVIDA_CAMPANHA/NOVAVIDA_PROCESSO/NOVAVIDA_LAYOUT_ENTRADA/
-     NOVAVIDA_LAYOUT_SAIDA ficam vazias ate serem preenchidas no .env).
-  3. Mapear e autorizar o download do resultado higienizado no Nova Vida
-     (tela Enriquecimentos, botao "Download Alternativo").
+     [REPETIDO em 20/07/2026] Segundo teste real confirma repetibilidade.
+  2. [CONCLUIDO em 20/07/2026] Definir, no Nova Vida, qual Campanha e
+     Processo usar no modal "Novo enriquecimento": Campanha=CLT_UY3_1207,
+     Processo=NVBOOK CEL OBG - BESTTIMETOCALL (ver secao 13 - Layout
+     Entrada/Saida NAO precisam de decisao, sao auto-preenchidos pelo
+     site). Configurado em config/settings.py / .env.
+  3. Autorizar um teste real do disparo de job no Nova Vida (upload +
+     "Iniciar job", efeito real/possivel custo) para mapear e validar o
+     download automatico do resultado higienizado (tela Enriquecimentos,
+     icone "download" - ver secao 13).
 
-RESULTADO DO TESTE REAL DE 17/07/2026 (dados ficam localmente, NAO
-versionados - pastas data/raw e data/treated sao git-ignoradas):
-  - data/raw/UY3_1707_CLT.zip - export bruto real do Astor Tech (4985
-    registros de clientes: CPF, nome, valores, datas de nascimento etc.).
-  - data/treated/UY3_1707_CLT_tratado.csv - apos tratamento (CPF, Nome,
-    Valor Liberado; 4985 linhas, todas validas).
-  - Esses arquivos contem dados reais de clientes e NAO foram enviados ao
-    Nova Vida (por instrucao explicita do usuario, que restringiu o teste
-    a "so a parte do astor"). Ficam no disco local ate o usuario decidir se
-    quer mante-los, apaga-los, ou seguir o fluxo (o que depende da decisao
-    2 acima).
+RESULTADOS DOS TESTES REAIS NO ASTOR TECH (dados ficam localmente, NAO
+versionados - pastas data/raw, data/treated e data/final sao
+git-ignoradas):
+  - 17/07/2026: data/raw/UY3_1707_CLT.zip - 4985 registros. Tratado ->
+    data/treated/UY3_1707_CLT_tratado.csv (4985 linhas validas).
+  - 20/07/2026: data/raw/UY3_2007_CLT.zip - 3814 registros. Tratado ->
+    data/treated/UY3_2007_CLT_tratado.csv (3812 linhas validas). Final
+    (pos-dedup) -> data/final/UY3_2007_CLT_tratado_dedup.csv.
+  - Ambos os arquivos tratados foram reprocessados em 20/07/2026 apos a
+    correcao do bug de "Valor Liberado" (ver acima) e contem o valor
+    correto agora.
+  - Nenhum desses arquivos foi enviado ao Nova Vida ainda (aguardando
+    decisao 3 acima). Ficam no disco local ate o usuario decidir se quer
+    mante-los, apaga-los, ou seguir o fluxo.
+  - O historico de deduplicacao (data/final/cpf_historico.csv) foi
+    resetado em 20/07/2026 apos um teste anterior (que reutilizou o
+    arquivo de 17/07/2026 so para validar o pipeline de tratamento, sem
+    nova consulta real) ter poluido a janela de 24h e feito 274 CPFs reais
+    do teste de 20/07/2026 serem incorretamente marcados como "ja
+    processados". Licao: nao reutilizar arquivos de teste antigos
+    diretamente no fluxo de dedup/orchestrator - usar um caminho separado
+    (fora de data/raw ou data/treated) para testes que nao sejam extracoes
+    novas de fato.
 
 ================================================================================
 FIM DO DOCUMENTO

@@ -48,6 +48,22 @@ def _ler_arquivo_bruto(caminho: Path) -> pd.DataFrame:
     return pd.read_csv(caminho, header=0, sep=None, engine="python")
 
 
+def _parse_valor_liberado(coluna: pd.Series) -> pd.Series:
+    """O export do Astor Tech entrega esta coluna ja como numero decimal
+    (ex. 5001.59), nao como string de moeda formatada (ex. "R$ 5.001,59").
+    Se ja vier numerica, usa direto - aplicar a limpeza de string (que
+    remove "." como separador de milhar) nesse caso apagaria o ponto
+    decimal e infla o valor em 100x (bug confirmado em 20/07/2026 com
+    arquivo real: 5001.59 virava 500159).
+    """
+    if pd.api.types.is_numeric_dtype(coluna):
+        return pd.to_numeric(coluna, errors="coerce")
+    return pd.to_numeric(
+        coluna.astype(str).str.replace(r"[R$\s.]", "", regex=True).str.replace(",", "."),
+        errors="coerce",
+    )
+
+
 def tratar(caminho_bruto: Path) -> Path:
     df = _ler_arquivo_bruto(caminho_bruto)
 
@@ -66,10 +82,7 @@ def tratar(caminho_bruto: Path) -> Path:
         {
             "CPF": df.iloc[:, idx_cpf],
             "Nome": df.iloc[:, idx_nome],
-            "Valor Liberado": pd.to_numeric(
-                df.iloc[:, idx_valor].astype(str).str.replace(r"[R$\s.]", "", regex=True).str.replace(",", "."),
-                errors="coerce",
-            ),
+            "Valor Liberado": _parse_valor_liberado(df.iloc[:, idx_valor]),
         }
     )
     total_bruto = len(saida)
