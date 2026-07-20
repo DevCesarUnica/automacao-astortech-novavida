@@ -99,11 +99,7 @@ def run_ciclo(permitir_consulta_real: bool = False, permitir_novavida_job_real: 
         tratado = data_treatment.tratar(bruto)
         final_sem_higienizar = _deduplicar_contra_historico(tratado)
 
-        logger.info(
-            "Base pronta para envio ao Nova Vida: %s (integracao Nova Vida ainda "
-            "nao implementada - ver src/novavida_integration.py)",
-            final_sem_higienizar,
-        )
+        logger.info("Base pronta para envio ao Nova Vida: %s", final_sem_higienizar)
 
         try:
             from src import novavida_integration

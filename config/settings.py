@@ -16,14 +16,11 @@ NOVAVIDA_EMPRESA = os.environ["NOVAVIDA_EMPRESA"]
 NOVAVIDA_URL = os.environ["NOVAVIDA_URL"]
 
 # Selecoes do modal "Novo enriquecimento" (tela Enriquecimentos do Nova
-# Vida). NAO DEFINIDAS ainda - decisao de negocio pendente (qual Campanha/
-# Processo/Layouts usar). Ficam vazias de proposito ate o usuario confirmar;
-# ver guard em src/novavida_integration.py.
+# Vida). Confirmado pelo usuario em 20/07/2026 via inspecao ao vivo do modal
+# real: so existem os campos Campanha (#campanhaselect) e Processo
+# (#processo) - ver guard em src/novavida_integration.py.
 NOVAVIDA_CAMPANHA = os.environ.get("NOVAVIDA_CAMPANHA", "")
-NOVAVIDA_SUBCAMPANHA = os.environ.get("NOVAVIDA_SUBCAMPANHA", "")
 NOVAVIDA_PROCESSO = os.environ.get("NOVAVIDA_PROCESSO", "")
-NOVAVIDA_LAYOUT_ENTRADA = os.environ.get("NOVAVIDA_LAYOUT_ENTRADA", "")
-NOVAVIDA_LAYOUT_SAIDA = os.environ.get("NOVAVIDA_LAYOUT_SAIDA", "")
 
 VALOR_MIN = float(os.environ.get("VALOR_MIN", "4001.00"))
 VALOR_MAX = float(os.environ.get("VALOR_MAX", "8000.99"))
@@ -47,7 +44,8 @@ COLUNA_VALOR_LIBERADO = "N"
 DATA_RAW_DIR = BASE_DIR / "data" / "raw"
 DATA_TREATED_DIR = BASE_DIR / "data" / "treated"
 DATA_FINAL_DIR = BASE_DIR / "data" / "final"
+DATA_NOVAVIDA_DIR = BASE_DIR / "data" / "novavida"
 LOGS_DIR = BASE_DIR / "logs"
 
-for _dir in (DATA_RAW_DIR, DATA_TREATED_DIR, DATA_FINAL_DIR, LOGS_DIR):
+for _dir in (DATA_RAW_DIR, DATA_TREATED_DIR, DATA_FINAL_DIR, DATA_NOVAVIDA_DIR, LOGS_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
