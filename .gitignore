@@ -7,9 +7,11 @@
 data/raw/*
 data/treated/*
 data/final/*
+data/novavida/*
 !data/raw/.gitkeep
 !data/treated/.gitkeep
 !data/final/.gitkeep
+!data/novavida/.gitkeep
 EXEMPLO_EXTRA*.csv
 *.xlsx
 *.xls

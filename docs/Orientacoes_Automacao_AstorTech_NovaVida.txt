@@ -331,15 +331,34 @@ arquivo testado ao vivo com permitir_job_real=False (preenche tudo e
 cancela, sem custo). Ver secao 13 para os detalhes/correcoes de selector
 (Layout Entrada/Saida auto-preenchidos, input de upload fora do modal).
 
-O QUE AINDA NAO FOI EXECUTADO DE PONTA A PONTA:
-  - Disparo do job de enriquecimento no Nova Vida (upload + "Iniciar job")
-    - implementado mas propositalmente bloqueado (ver traves abaixo);
-      pendente de autorizacao explicita do usuario para teste com custo
-      real.
-  - Download automatico do resultado higienizado do Nova Vida - selector
-    (icone "download" na lista de Enriquecimentos) mapeado via inspecao do
-    HTML, mas o comportamento real (tempo de processamento, como
-    identificar a linha certa) so pode ser confirmado rodando um job real.
+FLUXO NOVA VIDA VALIDADO PONTA A PONTA COM JOB REAL (20/07/2026, autorizado
+explicitamente pelo usuario, amostra de 116 leads para limitar custo - a
+cobranca do Nova Vida e por consulta):
+  - Primeira tentativa (formato de upload errado - CSV com virgula e 3
+    colunas): job concluiu em <1 min com Saida=0 (nenhum registro
+    enriquecido). Investigando o motivo, descobrimos que o botao "Layout
+    de entrada" do modal baixa um TEMPLATE oficial revelando o formato
+    real esperado: CSV separado por PIPE, com uma UNICA coluna "CPF" (nada
+    de Nome/Valor Liberado). Varios jobs antigos do historico da empresa
+    tinham o mesmo sintoma (Entrada>0, Saida=0), sugerindo que esse
+    problema de formato ja acontecia manualmente antes da automacao.
+  - src/novavida_integration.py corrigido para gerar esse formato
+    automaticamente (_preparar_arquivo_novavida) antes do upload.
+  - Segunda tentativa (formato corrigido, mesmos 116 CPFs): job concluiu
+    com Saida=102/116 (87%) e o DOWNLOAD FUNCIONOU DE PONTA A PONTA.
+    Resultado real: .zip com CSV (separador ";"), 24 colunas - CPF, NOME,
+    NOME_MAE, telefone celular (DDDCEL1/CEL1), WHATSAPP, EMAIL, endereco
+    completo, score de credito, entre outros (bem mais rico que o layout
+    minimo da secao 10 - CPF/NOME/VALOR LIBERADO/TELEFONE/EMAIL).
+  - Detalhe de automacao: o botao de download da lista so fica realmente
+    clicavel apos passar o mouse (hover) na linha - um clique "forcado"
+    sem hover previo nao disparava a requisicao. Corrigido em
+    _baixar_resultado().
+  - A linha do job na lista e localizada pelo NOME DO ARQUIVO enviado
+    (coluna "Arquivo"), nao pela Campanha (que se repete em varias linhas
+    do historico) - correcao aplicada apos o primeiro teste.
+  - Status de job concluido na lista e "EXPORTADO" (nao "CONCLUIDO" como
+    no Astor Tech).
 
 TRAVAS DE SEGURANCA (para nao gerar custo/efeito real sem autorizacao):
   - astor_extraction.extrair(permitir_consulta_real=False por padrao) -
@@ -360,10 +379,10 @@ respondidas):
      Processo=NVBOOK CEL OBG - BESTTIMETOCALL (ver secao 13 - Layout
      Entrada/Saida NAO precisam de decisao, sao auto-preenchidos pelo
      site). Configurado em config/settings.py / .env.
-  3. Autorizar um teste real do disparo de job no Nova Vida (upload +
-     "Iniciar job", efeito real/possivel custo) para mapear e validar o
-     download automatico do resultado higienizado (tela Enriquecimentos,
-     icone "download" - ver secao 13).
+  3. [CONCLUIDO em 20/07/2026] Autorizado e executado teste real do
+     disparo de job no Nova Vida (2 tentativas, 116 leads cada, ate
+     conseguir Saida>0 e validar o download - ver acima). Fluxo completo
+     Astor Tech -> Nova Vida agora validado ponta a ponta.
 
 RESULTADOS DOS TESTES REAIS NO ASTOR TECH (dados ficam localmente, NAO
 versionados - pastas data/raw, data/treated e data/final sao
