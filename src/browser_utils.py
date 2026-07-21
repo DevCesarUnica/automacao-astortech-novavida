@@ -1,26 +1,41 @@
 from playwright.sync_api import Page
 
 
-def close_overlays(page: Page) -> None:
-    """Fecha modais promocionais/tour que aparecem apos o login no Astor Tech."""
-    try:
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(400)
-    except Exception:
-        pass
-    for sel in ["button[aria-label='Close']", ".cdk-overlay-backdrop"]:
+def close_overlays(page: Page, tentativas: int = 4) -> None:
+    """Fecha modais promocionais/tour que aparecem apos o login no Astor Tech.
+
+    Repete o fechamento ate nao sobrar overlay (ate `tentativas` vezes) em vez
+    de fechar so um: overlays podem ficar empilhados (ex. toast + tour), e
+    fechar so o primeiro deixava um `.cdk-overlay-backdrop` residual capaz de
+    interceptar cliques em elementos reais bem depois (bug confirmado em
+    21/07/2026: backdrop leftover bloqueou o clique no menu de acoes da tela
+    de Exportacoes mesmo apos um close_overlays() + reload de pagina).
+    """
+    for _ in range(tentativas):
         try:
-            if page.locator(sel).count() > 0:
-                page.locator(sel).first.click(timeout=2000)
-                page.wait_for_timeout(400)
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
         except Exception:
             pass
-    try:
-        if page.get_by_role("button", name="Sair").count() > 0:
-            page.get_by_role("button", name="Sair").click(timeout=2000)
-            page.wait_for_timeout(400)
-    except Exception:
-        pass
+        fechou_algo = False
+        for sel in ["button[aria-label='Close']", ".cdk-overlay-backdrop"]:
+            try:
+                loc = page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click(timeout=2000)
+                    page.wait_for_timeout(300)
+                    fechou_algo = True
+            except Exception:
+                pass
+        try:
+            if page.get_by_role("button", name="Sair").count() > 0:
+                page.get_by_role("button", name="Sair").click(timeout=2000)
+                page.wait_for_timeout(300)
+                fechou_algo = True
+        except Exception:
+            pass
+        if not fechou_algo:
+            break
 
 
 def click_control_below_label(page: Page, label_text: str, exact: bool = True) -> bool:

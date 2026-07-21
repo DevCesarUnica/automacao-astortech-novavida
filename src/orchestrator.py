@@ -85,7 +85,20 @@ def _deduplicar_contra_historico(csv_tratado: Path) -> Path:
     return destino
 
 
-def run_ciclo(permitir_consulta_real: bool = False, permitir_novavida_job_real: bool = False) -> None:
+def _limitar_leads(csv_final: Path, limite: int) -> Path:
+    df = pd.read_csv(csv_final, dtype={"CPF": str})
+    df_limitado = df.head(limite)
+    destino = settings.DATA_FINAL_DIR / f"{csv_final.stem}_limite{limite}.csv"
+    df_limitado.to_csv(destino, index=False, encoding="utf-8-sig")
+    logger.info("Base limitada a %d leads (de %d disponiveis): %s", len(df_limitado), len(df), destino)
+    return destino
+
+
+def run_ciclo(
+    permitir_consulta_real: bool = False,
+    permitir_novavida_job_real: bool = False,
+    limite_leads: int | None = None,
+) -> None:
     if not _adquirir_lock():
         return
 
@@ -98,6 +111,9 @@ def run_ciclo(permitir_consulta_real: bool = False, permitir_novavida_job_real: 
         bruto = astor_extraction.extrair(permitir_consulta_real=permitir_consulta_real)
         tratado = data_treatment.tratar(bruto)
         final_sem_higienizar = _deduplicar_contra_historico(tratado)
+
+        if limite_leads is not None:
+            final_sem_higienizar = _limitar_leads(final_sem_higienizar, limite_leads)
 
         logger.info("Base pronta para envio ao Nova Vida: %s", final_sem_higienizar)
 
@@ -130,12 +146,19 @@ def main() -> None:
         action="store_true",
         help="Autoriza disparar um job real (com possivel custo) no Nova Vida",
     )
+    parser.add_argument(
+        "--limite-leads",
+        type=int,
+        default=None,
+        help="Trunca a base final para as N primeiras linhas antes do envio ao Nova Vida",
+    )
     args = parser.parse_args()
 
     if args.once:
         run_ciclo(
             permitir_consulta_real=args.permitir_consulta_real,
             permitir_novavida_job_real=args.permitir_novavida_job_real,
+            limite_leads=args.limite_leads,
         )
         return
 
@@ -145,6 +168,7 @@ def main() -> None:
         run_ciclo(
             permitir_consulta_real=args.permitir_consulta_real,
             permitir_novavida_job_real=args.permitir_novavida_job_real,
+            limite_leads=args.limite_leads,
         )
         time.sleep(intervalo_seg)
 
