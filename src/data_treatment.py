@@ -1,9 +1,19 @@
 """Modulo 2: Tratamento de dados (ver secao 5 do estudo de viabilidade).
 
-Le o arquivo bruto exportado do Astor Tech, mantem apenas as colunas
-I (CPF), R (Nome), N (Valor Liberado), aplica a regra de negocio
-Valor Liberado > R$4.000,00 e gera o CSV separado por virgula para envio
-ao Nova Vida.
+Le o arquivo bruto exportado do Astor Tech, mantem as colunas I (CPF),
+N (Valor Liberado), O (Numero de Parcelas), Q (Data da Consulta), R
+(Nome), S (Data de Nascimento), T (Margem Disponivel), aplica as regras
+de negocio (Valor Liberado > R$4.000,00 e Data da Consulta dentro da
+janela de FILTRO_HORAS_CONSULTA) e gera o CSV separado por virgula para
+envio ao Nova Vida.
+
+ATUALIZADO conforme PDF "Automacao Astor Tech -> Nova Vida" (v2): antes
+so mantinhamos I/R/N (CPF, Nome, Valor Liberado). Agora tambem entram O,
+Q, S e T porque o layout final passou a incluir Prazo (numero de
+parcelas) e mais um campo (ver settings.COLUNA_MARGEM_DISPONIVEL sobre a
+divergencia da coluna T com o PDF). O nome dessas colunas de saida em
+portugues e o merge final com o resultado do Nova Vida ficam em
+src/consolidacao.py.
 
 CONFIRMADO com arquivo real em 17/07/2026 (export "UY3_1707_CLT", 4985
 linhas, teste de ponta a ponta - ver docstring de src/astor_extraction.py):
@@ -21,6 +31,7 @@ linhas, teste de ponta a ponta - ver docstring de src/astor_extraction.py):
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 from string import ascii_uppercase
 
@@ -67,24 +78,26 @@ def _parse_valor_liberado(coluna: pd.Series) -> pd.Series:
 def tratar(caminho_bruto: Path) -> Path:
     df = _ler_arquivo_bruto(caminho_bruto)
 
-    idx_cpf = col_letter_to_index(settings.COLUNA_CPF)
-    idx_nome = col_letter_to_index(settings.COLUNA_NOME)
-    idx_valor = col_letter_to_index(settings.COLUNA_VALOR_LIBERADO)
-    max_idx = max(idx_cpf, idx_nome, idx_valor)
+    colunas = {
+        "CPF": settings.COLUNA_CPF,
+        "Nome": settings.COLUNA_NOME,
+        "Valor Liberado": settings.COLUNA_VALOR_LIBERADO,
+        "Numero de Parcelas": settings.COLUNA_NUM_PARCELAS,
+        "Data da Consulta": settings.COLUNA_DATA_CONSULTA,
+        "Data de Nascimento": settings.COLUNA_DATA_NASCIMENTO,
+        "Margem Disponivel": settings.COLUNA_MARGEM_DISPONIVEL,
+    }
+    indices = {campo: col_letter_to_index(letra) for campo, letra in colunas.items()}
+    max_idx = max(indices.values())
     if max_idx >= len(df.columns):
         raise ValueError(
             f"Arquivo bruto tem {len(df.columns)} colunas, mas a coluna "
-            f"'{settings.COLUNA_VALOR_LIBERADO}' (indice {idx_valor}) foi esperada. "
+            f"'{max(indices, key=indices.get)}' (indice {max_idx}) foi esperada. "
             "Confirmar layout real do export do Astor Tech."
         )
 
-    saida = pd.DataFrame(
-        {
-            "CPF": df.iloc[:, idx_cpf],
-            "Nome": df.iloc[:, idx_nome],
-            "Valor Liberado": _parse_valor_liberado(df.iloc[:, idx_valor]),
-        }
-    )
+    saida = pd.DataFrame({campo: df.iloc[:, idx] for campo, idx in indices.items()})
+    saida["Valor Liberado"] = _parse_valor_liberado(saida["Valor Liberado"])
     total_bruto = len(saida)
 
     saida["CPF"] = saida["CPF"].apply(limpar_cpf)
@@ -93,12 +106,21 @@ def tratar(caminho_bruto: Path) -> Path:
 
     saida = saida[saida["Valor Liberado"] > settings.VALOR_MINIMO_REGRA_NEGOCIO]
 
+    saida["Data da Consulta"] = pd.to_datetime(saida["Data da Consulta"], errors="coerce")
+    janela = datetime.now() - timedelta(hours=settings.FILTRO_HORAS_CONSULTA)
+    antes_filtro_data = len(saida)
+    saida = saida[saida["Data da Consulta"] >= janela]
+    descartados_fora_janela = antes_filtro_data - len(saida)
+
     saida = saida.drop_duplicates(subset="CPF", keep="first")
 
     logger.info(
-        "Tratamento concluido: %d linhas brutas -> %d CPFs invalidos descartados -> %d linhas finais",
+        "Tratamento concluido: %d linhas brutas -> %d CPFs invalidos descartados -> "
+        "%d fora da janela de %.0fh -> %d linhas finais",
         total_bruto,
         descartados_cpf_invalido,
+        descartados_fora_janela,
+        settings.FILTRO_HORAS_CONSULTA,
         len(saida),
     )
 

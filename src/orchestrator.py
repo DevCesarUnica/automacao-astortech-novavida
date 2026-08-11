@@ -97,39 +97,88 @@ def _limitar_leads(csv_final: Path, limite: int) -> Path:
 def run_ciclo(
     permitir_consulta_real: bool = False,
     permitir_novavida_job_real: bool = False,
+    permitir_criar_campanha: bool = False,
     limite_leads: int | None = None,
+    headless: bool = True,
 ) -> None:
     if not _adquirir_lock():
         return
 
+    from src import relatorio
+
+    resumo = relatorio.ResumoCiclo()
     inicio = time.time()
     try:
         logger.info("=== Iniciando ciclo ===")
 
         from src import astor_extraction, data_treatment
 
-        bruto = astor_extraction.extrair(permitir_consulta_real=permitir_consulta_real)
+        bruto = astor_extraction.extrair(permitir_consulta_real=permitir_consulta_real, headless=headless)
+        resumo.ok(f"Extracao Astor Tech: {bruto.name}")
+
         tratado = data_treatment.tratar(bruto)
+        linhas_tratadas = len(pd.read_csv(tratado, dtype={"CPF": str}))
+        resumo.ok(f"Tratamento: {linhas_tratadas} leads elegiveis (valor + janela de horas)")
+
         final_sem_higienizar = _deduplicar_contra_historico(tratado)
+        linhas_dedup = len(pd.read_csv(final_sem_higienizar, dtype={"CPF": str}))
+        resumo.ok(f"Deduplicacao: {linhas_dedup} leads novos (nao processados nas ultimas 24h)")
 
         if limite_leads is not None:
             final_sem_higienizar = _limitar_leads(final_sem_higienizar, limite_leads)
+            linhas_dedup = len(pd.read_csv(final_sem_higienizar, dtype={"CPF": str}))
+            resumo.ok(f"Limite aplicado: {linhas_dedup} leads (--limite-leads {limite_leads})")
 
         logger.info("Base pronta para envio ao Nova Vida: %s", final_sem_higienizar)
 
         try:
             from src import novavida_integration
 
-            novavida_integration.upload_e_higienizar(
-                final_sem_higienizar, permitir_job_real=permitir_novavida_job_real
+            resultado_novavida = novavida_integration.upload_e_higienizar(
+                final_sem_higienizar,
+                permitir_job_real=permitir_novavida_job_real,
+                permitir_criar_campanha=permitir_criar_campanha,
+                headless=headless,
             )
+            if resultado_novavida is None:
+                resumo.pulado("Nova Vida: job nao disparado (permitir_novavida_job_real=False)")
+                resumo.pulado("E-mail: nao enviado (job Nova Vida nao foi disparado)")
+            else:
+                resumo.ok(f"Nova Vida: resultado baixado ({resultado_novavida.name})")
+
+                from src import consolidacao
+
+                resultado_final = consolidacao.consolidar(final_sem_higienizar, resultado_novavida)
+                df_final = pd.read_csv(resultado_final, dtype={"CPF": str})
+                sem_contato = df_final["Telefone"].isna().sum()
+                resumo.ok(
+                    f"Consolidacao: {len(df_final)} leads na base final "
+                    f"({len(df_final) - sem_contato} com telefone, {sem_contato} sem)"
+                )
+
+                try:
+                    from src import notificacao
+
+                    astor_tratado_xlsx = consolidacao.gerar_copia_formatada(final_sem_higienizar)
+                    final_xlsx = resultado_final.with_suffix(".xlsx")
+                    notificacao.enviar_base_por_email(final_xlsx, astor_tratado_xlsx, headless=headless)
+                    resumo.ok(f"E-mail: enviado para {settings.EMAIL_DESTINATARIO}")
+                except Exception as e:
+                    # Falha no envio (config incompleta, SMTP fora do ar, etc.) nao
+                    # deve derrubar o ciclo - a base ja foi gerada com sucesso.
+                    logger.warning("Envio de e-mail nao realizado: %s", e)
+                    resumo.falhou(f"E-mail: nao enviado - {e}")
         except (NotImplementedError, RuntimeError) as e:
             logger.warning("Etapa Nova Vida pendente: %s", e)
+            resumo.falhou(f"Nova Vida: {e}")
+            resumo.pulado("E-mail: nao enviado (etapa Nova Vida nao concluida)")
 
         logger.info("=== Ciclo concluido em %.1fs ===", time.time() - inicio)
-    except Exception:
+    except Exception as e:
         logger.exception("Ciclo falhou com erro")
+        resumo.erro(e)
     finally:
+        resumo.salvar()
         _liberar_lock()
 
 
@@ -147,10 +196,24 @@ def main() -> None:
         help="Autoriza disparar um job real (com possivel custo) no Nova Vida",
     )
     parser.add_argument(
+        "--permitir-criar-campanha",
+        action="store_true",
+        help=(
+            "Autoriza criar uma Campanha nova a cada ciclo no Nova Vida (botao '+', "
+            "NAO validado ao vivo - so usar em sessao supervisionada). Sem esta flag, "
+            "reaproveita a campanha fixa de NOVAVIDA_CAMPANHA (comportamento validado)."
+        ),
+    )
+    parser.add_argument(
         "--limite-leads",
         type=int,
         default=None,
         help="Trunca a base final para as N primeiras linhas antes do envio ao Nova Vida",
+    )
+    parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Abre o navegador visivel (nao-headless), util para acompanhar o robo em testes",
     )
     args = parser.parse_args()
 
@@ -158,7 +221,9 @@ def main() -> None:
         run_ciclo(
             permitir_consulta_real=args.permitir_consulta_real,
             permitir_novavida_job_real=args.permitir_novavida_job_real,
+            permitir_criar_campanha=args.permitir_criar_campanha,
             limite_leads=args.limite_leads,
+            headless=not args.headed,
         )
         return
 
@@ -168,7 +233,9 @@ def main() -> None:
         run_ciclo(
             permitir_consulta_real=args.permitir_consulta_real,
             permitir_novavida_job_real=args.permitir_novavida_job_real,
+            permitir_criar_campanha=args.permitir_criar_campanha,
             limite_leads=args.limite_leads,
+            headless=not args.headed,
         )
         time.sleep(intervalo_seg)
 

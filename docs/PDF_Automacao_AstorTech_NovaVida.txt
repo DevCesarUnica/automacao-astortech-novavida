@@ -1,0 +1,356 @@
+================================================================================
+AUTOMACAO ASTOR TECH -> NOVA VIDA
+Transcricao completa do PDF "Automacao Astor Tech -> Nova Vida (2).pdf"
+================================================================================
+
+--------------------------------------------------------------------------------
+PAGINA 1 - CAPA
+--------------------------------------------------------------------------------
+Automacao Astor Tech -> Nova Vida
+Automacao do processo de extracao, tratamento e higienizacao de bases
+
+--------------------------------------------------------------------------------
+PAGINA 2 - COMO O PROCESSO FUNCIONA HOJE / PRINCIPAIS DESAFIOS
+--------------------------------------------------------------------------------
+COMO O PROCESSO FUNCIONA HOJE:
+  - Extracao manual no Astor Tech
+  - Tratamento da base no Excel
+  - Remocao de colunas
+  - Envio manual para o Nova Vida
+  - Download da base higienizada
+  - Disponibilizacao para operacao
+
+PRINCIPAIS DESAFIOS:
+  - Alto tempo operacional
+  - Muitas etapas manuais
+  - Risco de erros humanos
+  - Atraso na entrega dos leads
+  - Baixa padronizacao do processo
+
+--------------------------------------------------------------------------------
+PAGINA 3 - OBJETIVO DO PROJETO
+--------------------------------------------------------------------------------
+OBJETIVO DO PROJETO:
+Desenvolver um robo capaz de executar automaticamente:
+  - Extracao da base
+  - Tratamento dos dados
+  - Geracao do CSV
+  - Upload no Nova Vida
+  - Higienizacao
+  - Download da base final
+
+--------------------------------------------------------------------------------
+PAGINA 4 - FLUXO EM 7 ETAPAS (diagrama)
+--------------------------------------------------------------------------------
+01 - Extracao da Base | Astor Tech
+  - Acessar o Astor Tech
+  - Selecionar consulta UY3
+  - Aplicar filtro Ultimas 24 horas
+  - Atualizar filtros
+  - Extrair a base
+
+02 - Tratamento Inicial | Filtragem Automatica
+  - Filtrar ticket superior a R$ 4.000
+  - Considerar apenas clientes consultados nas ultimas horas
+    (Ex.: ultimas 6 horas)
+
+03 - Preparacao do Arquivo | Tratamento da Base
+  - Duplicar a planilha
+  - Manter apenas a coluna CPF
+  - Salvar o arquivo em formato CSV
+
+04 - Integracao Nova Vida | Upload Automatico
+  Enviar o arquivo para o Nova Vida utilizando as opcoes:
+  - NVBOOK
+  - CEL
+  - OBG
+  - BESTTIMETOCALL
+
+05 - Higienizacao | Processamento
+  - Higienizacao automatica
+  - Validacao dos contatos
+  - Enriquecimento dos dados
+
+06 - Retorno da Base | Download Automatico
+  O robo realiza a extracao da base higienizada apos a conclusao do
+  processamento.
+
+07 - Base Final | Entrega da Base
+  Base pronta contendo:
+  - CPF
+  - Nome
+  - Valor Liberado
+  - Parcela
+  - Prazo
+  - Telefone
+  - Consulta
+  - E-mail
+
+--------------------------------------------------------------------------------
+PAGINA 5 - EXTRACAO DA BASE NO ASTOR TECH
+--------------------------------------------------------------------------------
+Texto:
+Acesse o sistema Astor Tech e navegue ate Analise -> Painel de Controle.
+Em seguida, selecione o Tipo de Consulta: UY, e clique em Consultar para
+abrir a tela de filtros.
+
+Na secao de filtros, mantenha selecionado apenas o periodo de ate 24
+horas, garantindo que a base contenha somente os clientes consultados
+recentemente.
+
+Apos aplicar o filtro, clique em Atualizar Filtros para que o sistema
+processe a consulta. Em seguida, retorne ao topo da pagina e selecione a
+opcao Exportar.
+
+Na janela de exportacao, informe o nome do arquivo seguindo o padrao:
+UY3_DDMM_AAAA_HHMM
+
+Print 1 - tabela "Limite Por Periodo" (aparece apos consultar):
+  FAIXA         QUANTIDADE     VALOR
+  <= 24 HORAS   18.541         R$ 94.765.740,76
+  <= 7 DIAS     159.087        R$ 777.853.884,85
+  > 7 DIAS      528.131        R$ 2.875.264.100,04
+
+Print 2 - modal "Enviar para Campanha":
+  Nome do Arquivo *: UY3 0308 1130
+  Finalidade *: Baixar Base (dropdown)
+  Limite Quantidade de Cliente *: 705.759
+  Botoes: Cancelar | Baixar Base
+
+--------------------------------------------------------------------------------
+PAGINA 6 - EXPORTACAO DA BASE
+--------------------------------------------------------------------------------
+Texto:
+Apos concluir a aplicacao dos filtros, acesse a opcao Exportacoes dentro
+do proprio sistema Astor Tech.
+
+Na tela de exportacoes, localize a ultima base gerada, que corresponde a
+consulta realizada anteriormente. Em seguida, clique no menu de acoes
+(icone de tres pontos) e selecione a opcao Download para baixar o
+arquivo.
+
+Ao final desta etapa, a base estara disponivel localmente e pronta para
+o processo de tratamento e filtragem dos dados.
+
+Fluxo da etapa:
+Exportacoes -> Ultima Base Gerada -> (Acoes, icone 3 pontos) -> Download
+da Base -> Arquivo disponivel para tratamento
+
+Print 1 - menu lateral:
+  Analise
+    Painel de Controle
+    Exportacoes  (destacado)
+    Importacoes
+  Contatos
+
+Print 2 - tabela de Exportacoes (colunas parciais visiveis):
+  QTD. SOLICITADA | QTD. ENTREGUE | STATUS    | ACAO
+  6299            | 6300          | CONCLUIDO | (menu 3 pontos ->
+                                                 "Download")
+  6236            | 6237          |           |
+
+Print 3 - arquivo baixado:
+  UY3 0308.zip - 1.235 KB - 2 horas atras
+
+--------------------------------------------------------------------------------
+PAGINA 7 - TRATAMENTO DA BASE
+--------------------------------------------------------------------------------
+Texto:
+Apos realizar o download da base, abra o arquivo no Excel e inicie o
+tratamento dos dados.
+
+Nesta etapa, todas as colunas desnecessarias devem ser removidas,
+mantendo apenas as informacoes que serao utilizadas nas proximas etapas
+do processo.
+
+As colunas que devem permanecer sao:
+  I - CPF
+  N - Valor Liberado
+  O - Numero de Parcelas
+  Q - Data da Consulta
+  R - Nome
+  S - Data de Nascimento
+  T - Valor da Parcela
+
+Print - planilha Excel (cabecalho em ingles, visivel colunas A-H):
+  A: registration_number
+  B: liquid_value
+  C: number_of_payments
+  D: request_date
+  E: employee_name
+  F: birth_date
+  G: available_margin
+  (linhas de exemplo com CPFs, nomes e valores reais)
+
+--------------------------------------------------------------------------------
+PAGINA 8 - APLICACAO DOS FILTROS
+--------------------------------------------------------------------------------
+Texto:
+Com a base ja tratada, aplique os filtros necessarios para manter apenas
+os registros que atendem as regras de negocio da operacao.
+
+Na coluna Valor Liberado, filtre somente os clientes com ticket superior
+a R$ 4.000,00.
+
+Em seguida, na coluna Data da Consulta, selecione apenas os clientes
+consultados nas ultimas horas, conforme a necessidade da operacao
+(exemplo: ultimas 6 horas).
+
+Apos a aplicacao desses filtros, a base contera apenas os clientes
+elegiveis para envio ao processo de higienizacao no Nova Vida.
+
+Criterios de selecao:
+  Campo             | Filtro
+  ------------------|---------------------
+  Valor Liberado    | Acima de R$ 4.000,00
+
+Fluxo da etapa:
+Abrir filtros -> Valor Liberado > R$ 4.000 -> Data da Consulta (ultimas
+horas) -> Base validada para higienizacao
+
+--------------------------------------------------------------------------------
+PAGINA 9 - PREPARACAO DO ARQUIVO PARA HIGIENIZACAO
+--------------------------------------------------------------------------------
+Texto:
+O sistema Nova Vida aceita apenas arquivos contendo a coluna CPF para
+realizar o processo de higienizacao. Por esse motivo, e necessario criar
+uma copia da base tratada antes do envio.
+
+Na nova planilha, mantenha somente a coluna CPF, removendo todas as
+demais informacoes. Em seguida, salve o arquivo no formato CSV (separado
+por virgulas), padrao exigido pelo sistema para importacao.
+
+Essa etapa garante que o arquivo esteja no layout correto e pronto para
+ser enviado ao Nova Vida.
+
+Regras desta etapa:
+  - Criar uma copia da base tratada.
+  - Manter apenas a coluna CPF.
+  - Excluir todas as demais colunas.
+  - Salvar o arquivo no formato CSV (.csv).
+
+Print - duas planilhas lado a lado:
+  "BASE PARA NOVA VIDA" (apenas coluna A: CPF do CLIENTE, valores
+  formatados xxx.xxx.xxx-xx)
+  "BASE ORIGINAL" (colunas: Cliente, CPF do CLIENTE, Banco Emprestimo,
+  Operacao, Prazo...)
+
+--------------------------------------------------------------------------------
+PAGINA 10 - ENVIO DA BASE PARA HIGIENIZACAO
+--------------------------------------------------------------------------------
+Texto:
+Com o arquivo CSV contendo apenas a coluna CPF, acesse o sistema Nova
+Vida para iniciar o processo de higienizacao dos contatos.
+
+No menu principal, navegue ate Enriquecimento e clique em Adicionar para
+criar uma nova campanha. Defina um nome seguindo o padrao da operacao,
+por exemplo: UY3_0308_1100
+
+Em seguida, selecione a opcao BESTTIMETOCALL, responsavel pelo
+enriquecimento dos dados da base. Apos conferir as informacoes da
+campanha e anexar o arquivo CSV, clique em Iniciar Job para dar inicio
+ao processamento.
+
+Ao final dessa etapa, o Nova Vida iniciara automaticamente a
+higienizacao e o enriquecimento dos contatos enviados.
+
+Fluxo da etapa:
+Acessar Nova Vida -> Enriquecimento -> Adicionar -> Criar Campanha
+(UY3_DDMM_HHMM) -> Selecionar BESTTIMETOCALL -> Anexar arquivo CSV ->
+Iniciar Job
+
+Print 1 - menu lateral Nova Vida:
+  Indicadores gerais
+  Enriquecimentos (destacado, seta apontando)
+  B.I.
+
+Print 2 - dropdown "Processo":
+  CLT PLUS
+  CLTFULL+BANCOS
+  NEXT_CLT
+  NVBOOK - ATRIB NOME
+  NVBOOK ATRIB TELEFONE
+  NVBOOK CEL OBG - BESTTIMETOCALL   (destacado/selecionado)
+  NVBOOK_PJ
+  NVCONSIG
+  SCORE_CLT_COMPLETO - FL_BESTTIME
+
+--------------------------------------------------------------------------------
+PAGINA 11 - DOWNLOAD DA BASE HIGIENIZADA E CONSOLIDACAO DOS DADOS
+--------------------------------------------------------------------------------
+Texto:
+Apos a conclusao da higienizacao, a base estara disponivel para download
+na propria tela de Enriquecimento do sistema Nova Vida.
+
+Com o arquivo baixado, aplique um filtro na coluna AB, mantendo apenas
+os clientes que possuem WhatsApp disponivel. Em seguida, realize a
+juncao da coluna Y (DDD) com a coluna Z (Telefone) para formar o numero
+completo de contato.
+
+Apos preparar a base higienizada, utilize a funcao PROCX para transferir
+as informacoes obtidas no Nova Vida para a base original extraida do
+Astor Tech.
+
+Nessa etapa, devem ser incorporados os seguintes dados:
+  - Telefone com WhatsApp
+  - E-mail
+
+Essas informacoes serao adicionadas a base inicial, que ja contem os
+dados de Nome, CPF, Valor Liberado, Parcela, Prazo e Data da Consulta,
+resultando em uma base unica, completa e pronta para utilizacao pela
+operacao.
+
+Fluxo da etapa:
+Download da Base Higienizada -> Filtrar clientes com WhatsApp (Coluna
+AB) -> Unir DDD (Y) + Telefone (Z) -> Aplicar PROCX -> Adicionar
+Telefone e E-mail a base original -> Base final pronta para operacao
+
+Print 1 - lista "Enriquecimentos recentes":
+  ID     | Arquivo          | Entrada | Saida | Data        | Status
+  399398 | Carol            | 852     | 749   | Ha 2 hora(s)| EXPORTADO
+           BMG_HIG_NV.csv
+
+Print 2 - colunas Y, Z, AB da base higienizada:
+  Y (DDDCEL1) | Z (CEL1)   | AB (FLWHATSAPP...)
+  94          | 9,93E+08   | S
+  24          | 9,88E+08   | S
+  21          | 9,76E+08   | S
+  51          | 9,92E+08   | S
+  19          | 9,71E+08   | S
+  62          | 9,92E+08   | S
+  61          | 9,81E+08   | S
+  54          | 9,92E+08   | S
+  31          | 9,85E+08   | N
+  11          | 9,53E+08   | S
+  11          | 9,71E+08   | S
+  95          | 9,91E+08   | S
+  51          | 9,97E+08   | (corte)
+
+--------------------------------------------------------------------------------
+PAGINA 12 - OBJETIVO DA AUTOMACAO
+--------------------------------------------------------------------------------
+OBJETIVO DA AUTOMACAO
+
+Automatizar todo o processo de extracao, tratamento e higienizacao da
+base de clientes, reduzindo significativamente o tempo entre a geracao
+do lead e sua disponibilizacao para a operacao.
+
+Como o valor liberado e atualizado constantemente, e fundamental que os
+clientes sejam acionados o mais rapido possivel apos a extracao da base.
+Dessa forma, a automacao permitira que os leads cheguem a equipe
+comercial em menor tempo, aumentando a agilidade da operacao e as
+oportunidades de conversao.
+
+--------------------------------------------------------------------------------
+PAGINA 13 - (pagina em branco no PDF original)
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+PAGINA 14 - CONTRACAPA (repete a capa)
+--------------------------------------------------------------------------------
+Automacao Astor Tech -> Nova Vida
+Automacao do processo de extracao, tratamento e higienizacao de bases
+
+================================================================================
+FIM DA TRANSCRICAO DO PDF
+================================================================================

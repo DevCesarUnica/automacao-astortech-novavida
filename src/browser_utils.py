@@ -10,6 +10,23 @@ def close_overlays(page: Page, tentativas: int = 4) -> None:
     interceptar cliques em elementos reais bem depois (bug confirmado em
     21/07/2026: backdrop leftover bloqueou o clique no menu de acoes da tela
     de Exportacoes mesmo apos um close_overlays() + reload de pagina).
+
+    CONFIRMADO ao vivo em 04/08/2026: o bug persistia porque a funcao parava
+    de tentar assim que uma rodada nao conseguia CLICAR em nada (fechou_algo
+    == False), mesmo que o backdrop `.cdk-overlay-backdrop-showing` ainda
+    estivesse visivel bloqueando cliques - se o clique no proprio backdrop
+    lancava excecao (ex.: outro overlay empilhado por cima dele), a funcao
+    desistia cedo demais. Agora o criterio de parada e' checar se ainda
+    resta algum `.cdk-overlay-backdrop-showing` na pagina, nao se a ultima
+    tentativa "conseguiu clicar em algo".
+
+    ATUALIZADO em 06/08/2026: ciclo deu timeout no clique do combobox "Tipo
+    da Consulta" porque um tour Shepherd.js (biblioteca diferente do CDK,
+    classes `shepherd-*`) apareceu sobre o Painel de Controle e seu overlay
+    (`.shepherd-modal-overlay-container`) ficou interceptando o clique por
+    5s ate estourar. Agora a funcao tambem tenta fechar esse tour (icone de
+    cancelar padrao do Shepherd) e so para quando nao sobrar nem backdrop do
+    CDK nem elemento de tour Shepherd na tela.
     """
     for _ in range(tentativas):
         try:
@@ -17,24 +34,28 @@ def close_overlays(page: Page, tentativas: int = 4) -> None:
             page.wait_for_timeout(300)
         except Exception:
             pass
-        fechou_algo = False
-        for sel in ["button[aria-label='Close']", ".cdk-overlay-backdrop"]:
+        for sel in [
+            "button[aria-label='Close']",
+            ".cdk-overlay-backdrop",
+            ".shepherd-cancel-icon",
+        ]:
             try:
                 loc = page.locator(sel)
                 if loc.count() > 0:
                     loc.first.click(timeout=2000)
                     page.wait_for_timeout(300)
-                    fechou_algo = True
             except Exception:
                 pass
         try:
             if page.get_by_role("button", name="Sair").count() > 0:
                 page.get_by_role("button", name="Sair").click(timeout=2000)
                 page.wait_for_timeout(300)
-                fechou_algo = True
         except Exception:
             pass
-        if not fechou_algo:
+        if (
+            page.locator(".cdk-overlay-backdrop-showing").count() == 0
+            and page.locator("[data-shepherd-step-id]").count() == 0
+        ):
             break
 
 

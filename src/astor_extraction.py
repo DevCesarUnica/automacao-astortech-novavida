@@ -75,12 +75,40 @@ Periodo = 24 Horas" e "Valor Liberado" NAO existem como campo generico no
 bloco de Filtros dinamico (Campo/Condicao/Valor) do Painel de Controle -
 eles vem da tabela de filtros rapidos pos-consulta (passo 5 acima), no fim
 da pagina, so visivel apos rodar uma consulta real.
+
+ATUALIZADO conforme PDF "Automacao Astor Tech -> Nova Vida" (v2):
+  - A extracao passou a selecionar SO o filtro rapido de periodo (<=24
+    HORAS). O filtro de faixa de Valor Liberado deixou de ser aplicado
+    aqui - a regra de negocio (Valor Liberado > R$4.000) ja e' aplicada
+    depois, no tratamento (data_treatment.py), entao selecionar a faixa
+    aqui tambem era redundante.
+  - Nome do arquivo de export mudou de UY3_DDMM_PERFILBASE para
+    UY3_DDMM_HHMM (ex.: UY3_0308_1130), conforme os exemplos reais do PDF
+    (o texto do PDF menciona "UY3_DDMM_AAAA_HHMM" com ano, mas os prints
+    mostram o padrao sem ano - seguimos os prints).
+  - O PDF mostra um modal de exportacao ("Enviar para Campanha") com
+    campos extras "Finalidade" e "Limite Quantidade de Cliente" que nao
+    foram vistos na validacao ao vivo anterior (que so preenchia o nome).
+    Ambos aparecem pre-preenchidos nos prints (Finalidade="Baixar Base",
+    Limite=valor default do sistema) e o projeto ja controla volume via
+    --limite-leads no orchestrator, entao _exportar() NAO foi alterada
+    para preenche-los. Se uma sessao live mostrar que vem vazios/
+    obrigatorios, usar click_control_below_label() (browser_utils.py) por
+    label, mesmo padrao ja usado para "Tipo da Consulta".
+
+CONFIRMADO ao vivo em 04/08/2026: o botao "Exportar" (id real "enviar-
+campanha") ficou desabilitado por mais de 6.5s apos "Atualizar Filtros",
+estourando o timeout fixo de clique e derrubando o ciclo com
+TimeoutError/"element is not enabled". O tempo de recalculo da tabela varia
+com o volume de resultados da consulta - _exportar() agora faz polling do
+estado do botao (ate 20s) antes de clicar, em vez de um sleep fixo de 3s.
 """
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from config import settings
@@ -89,7 +117,6 @@ from src.logging_setup import get_logger
 
 logger = get_logger("astor_extraction")
 
-FILTRO_VALOR_LIBERADO_TEXTO = "R$4001,00 à R$8000,99"
 FILTRO_PERIODO_TEXTO = "<= 24 HORAS"
 
 
@@ -107,15 +134,35 @@ def _login(page) -> None:
 
 
 def _navegar_ate_painel_controle(page) -> None:
+    """Confirmado ao vivo em 04/08/2026: o clique em "Painel de Controle"
+    pode nao navegar (pagina permanece em /home) quando o submenu "Analise"
+    ainda nao terminou de renderizar nos 800ms fixos de espera anteriores -
+    o clique acerta um texto igual que ainda nao e o link real. Por isso
+    agora o codigo confere a URL apos o clique e tenta de novo (ate 5x) em
+    vez de assumir que um unico clique bastou.
+    """
     page.get_by_text("Análise", exact=True).first.click(timeout=5000)
-    page.wait_for_timeout(800)
-    page.get_by_text("Painel de Controle", exact=True).first.click(timeout=5000)
-    page.wait_for_timeout(2000)
+    page.get_by_text("Painel de Controle", exact=True).first.wait_for(state="visible", timeout=5000)
+    for _ in range(5):
+        page.get_by_text("Painel de Controle", exact=True).first.click(timeout=5000)
+        page.wait_for_timeout(1000)
+        if "painel-controle" in page.url:
+            break
+    else:
+        raise RuntimeError(
+            "Clique em 'Painel de Controle' nao navegou para a URL esperada "
+            f"(permaneceu em {page.url}) apos varias tentativas."
+        )
     close_overlays(page)
     logger.info("Painel de Controle carregado. URL: %s", page.url)
 
 
 def _selecionar_tipo_consulta(page) -> None:
+    # 06/08/2026: o tour Shepherd.js ("step-consulta") e' especifico deste
+    # campo e pode aparecer so agora, mesmo depois do close_overlays() ja
+    # chamado em _navegar_ate_painel_controle - por isso fecha de novo aqui
+    # antes de tentar clicar no combobox (ver close_overlays em browser_utils.py).
+    close_overlays(page)
     combobox = page.locator("div[role='combobox'].ng-input").first
     if combobox.count() == 0:
         ok = click_control_below_label(page, "Tipo da Consulta")
@@ -136,18 +183,21 @@ def _consultar(page) -> None:
 
 
 def _selecionar_filtros_rapidos(page) -> None:
-    """Seleciona as linhas da tabela de filtros rapidos (Valor Liberado /
-    Limite por Periodo) que aparece no fim da pagina apos consultar.
+    """Seleciona a linha da tabela de filtros rapidos (Limite por Periodo)
+    que aparece no fim da pagina apos consultar.
 
     CONFIRMADO ao vivo em 17/07/2026: clicar no texto da celula (<td>) NAO
     seleciona o filtro (a tela mostra o toast "Nenhum filtro selecionado!").
     Cada linha tem um radio button (circulo) em uma celula separada, a
     esquerda da coluna de texto - e nele que o clique precisa acontecer.
+
+    ATUALIZADO conforme PDF v2: nao seleciona mais o filtro de faixa de
+    Valor Liberado aqui (ver docstring do modulo) - so o de periodo.
     """
     page.keyboard.press("End")
     page.wait_for_timeout(1200)
 
-    for texto in (FILTRO_VALOR_LIBERADO_TEXTO, FILTRO_PERIODO_TEXTO):
+    for texto in (FILTRO_PERIODO_TEXTO,):
         celula = page.get_by_text(texto, exact=True).first
         celula.wait_for(timeout=10000)
         linha = celula.locator("xpath=ancestor::tr[1]")
@@ -166,11 +216,30 @@ def _selecionar_filtros_rapidos(page) -> None:
 def _atualizar_filtros(page) -> None:
     page.get_by_role("button", name="Atualizar Filtros").click(timeout=5000)
     page.wait_for_timeout(3000)
-    logger.info("Filtros atualizados (Valor Liberado + Limite por Periodo).")
+    logger.info("Filtros atualizados (Limite por Periodo).")
 
 
 def _exportar(page, nome_arquivo: str) -> None:
-    page.get_by_role("button", name="Exportar").click(timeout=5000)
+    """O botao "Exportar" fica desabilitado ate a tabela recalcular os
+    resultados apos "Atualizar Filtros" - confirmado ao vivo em 04/08/2026
+    (TimeoutError "element is not enabled" mesmo apos os 3s fixos de espera
+    em _atualizar_filtros). O tempo de recalculo varia com o volume de
+    resultados, entao aqui o codigo faz polling do estado do botao em vez de
+    assumir que ja esta pronto.
+    """
+    botao_exportar = page.get_by_role("button", name="Exportar").first
+    for _ in range(20):
+        if botao_exportar.is_enabled():
+            break
+        page.wait_for_timeout(1000)
+    else:
+        raise RuntimeError(
+            "Botao 'Exportar' permaneceu desabilitado apos 20s esperando os filtros "
+            "recalcularem. Pode indicar que a consulta com os filtros aplicados nao "
+            "retornou nenhum resultado - verificar manualmente antes de tentar novamente."
+        )
+
+    botao_exportar.click(timeout=5000)
     page.wait_for_timeout(1000)
 
     overlay = page.locator(".cdk-overlay-pane").last
@@ -230,9 +299,26 @@ def _baixar_de_exportacoes(
             f"apos {tentativas} tentativas."
         )
 
-    close_overlays(page)
-    page.wait_for_timeout(300)
-    linha.locator("button").last.click(timeout=5000)
+    botao_menu = linha.locator("button").last
+    for tentativa_clique in range(4):
+        close_overlays(page)
+        page.wait_for_timeout(300)
+        try:
+            botao_menu.click(timeout=5000)
+            break
+        except PlaywrightTimeoutError:
+            logger.warning(
+                "Clique no menu de acoes da linha '%s' bloqueado por overlay residual "
+                "(tentativa %d/4) - chamando close_overlays() de novo.",
+                nome_arquivo,
+                tentativa_clique + 1,
+            )
+    else:
+        raise RuntimeError(
+            f"Nao foi possivel clicar no menu de acoes da linha '{nome_arquivo}' - "
+            "overlay/backdrop residual continuou bloqueando o clique mesmo apos varias "
+            "tentativas de close_overlays()."
+        )
     page.wait_for_timeout(500)
 
     with page.expect_download(timeout=60000) as download_info:
@@ -246,13 +332,32 @@ def _baixar_de_exportacoes(
     return destino
 
 
-def extrair(permitir_consulta_real: bool = False) -> Path:
+def _salvar_evidencia_erro(page, etapa: str) -> None:
+    """Salva screenshot + HTML da pagina no momento de uma falha, em
+    logs/screenshots/. Nunca deve derrubar o ciclo por conta propria - se a
+    pagina/browser ja estiver em estado ruim (ex.: crash), so loga o aviso.
+    """
+    pasta = settings.LOGS_DIR / "screenshots"
+    pasta.mkdir(parents=True, exist_ok=True)
+    carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base = pasta / f"{carimbo}_{etapa}"
+    try:
+        page.screenshot(path=str(base.with_suffix(".png")), full_page=True)
+        base.with_suffix(".html").write_text(page.content(), encoding="utf-8")
+        logger.info("Evidencia de erro salva em %s.png / .html", base)
+    except Exception as e:
+        logger.warning("Nao foi possivel salvar evidencia de erro: %s", e)
+
+
+def extrair(permitir_consulta_real: bool = False, headless: bool = True) -> Path:
     """Executa o ciclo completo de extracao no Astor Tech.
 
     `permitir_consulta_real` e um trava de seguranca proposital: consultas no
     Astor Tech podem ter custo por CPF retornado (bureau de dados). So passe
     True apos confirmar com o negocio/financeiro que o custo por consulta e
     aceitavel para rodar em producao.
+    `headless=False` abre o navegador visivel, util para acompanhar o robo
+    em execucao durante testes.
     """
     if not permitir_consulta_real:
         raise RuntimeError(
@@ -260,10 +365,10 @@ def extrair(permitir_consulta_real: bool = False) -> Path:
             "apenas apos confirmar o custo por consulta no Astor Tech."
         )
 
-    nome_arquivo = f"UY3_{datetime.now():%d%m}_{settings.PERFIL_BASE}"
+    nome_arquivo = f"UY3_{datetime.now():%d%m_%H%M}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=headless)
         page = browser.new_page(accept_downloads=True)
         try:
             _login(page)
@@ -275,6 +380,14 @@ def extrair(permitir_consulta_real: bool = False) -> Path:
             _exportar(page, nome_arquivo)
             destino = _baixar_de_exportacoes(page, nome_arquivo, settings.DATA_RAW_DIR)
             return destino
+        except Exception:
+            # 06/08/2026: em modo headed o navegador fecha (finally abaixo)
+            # antes de alguem conseguir olhar a tela apos uma falha, entao um
+            # erro ao vivo ficava sem nenhuma pista alem da stack trace. Salva
+            # screenshot + HTML da pagina no momento do erro para diagnostico
+            # posterior, sem depender de acompanhar a execucao em tempo real.
+            _salvar_evidencia_erro(page, "extrair")
+            raise
         finally:
             browser.close()
 

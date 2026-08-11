@@ -4,14 +4,16 @@
 !.env.example
 
 # Dados reais de clientes / exports (PII) - NUNCA versionar
-data/raw/*
+data/astor_bruto/*
 data/treated/*
 data/final/*
 data/novavida/*
-!data/raw/.gitkeep
+data/entregas/*
+!data/astor_bruto/.gitkeep
 !data/treated/.gitkeep
 !data/final/.gitkeep
 !data/novavida/.gitkeep
+!data/entregas/.gitkeep
 EXEMPLO_EXTRA*.csv
 *.xlsx
 *.xls

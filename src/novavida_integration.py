@@ -81,9 +81,23 @@ formato exigido pelo layout (pipe + CPF unico) e anexa. So clica em
 "Iniciar job" (efeito real / possivel custo) se permitir_job_real=True E
 toda a configuracao estiver preenchida; caso contrario cancela o modal sem
 disparar nada, so para validar que o preenchimento funcionaria.
+
+ATUALIZADO conforme PDF "Automacao Astor Tech -> Nova Vida" (v2): o
+processo passou a pedir uma Campanha NOVA a cada ciclo (nome
+UY3_DDMM_HHMM), em vez de reaproveitar uma campanha fixa existente
+("CLT_UY3_1207"). Isso e' feito via botao "+" ao lado de #campanhaselect,
+que nunca foi inspecionado ao vivo - por isso e' controlado pelo novo
+parametro `permitir_criar_campanha` (default False): quando False (padrao,
+comportamento ja validado em producao), continua selecionando a campanha
+fixa de settings.NOVAVIDA_CAMPANHA; quando True, tenta criar a campanha
+nova e levanta RuntimeError se os seletores nao baterem, em vez de
+arriscar clicar no elemento errado. So ligar True numa sessao
+supervisionada, depois de mapear o dialogo real do botao "+".
 """
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -93,11 +107,6 @@ from config import settings
 from src.logging_setup import get_logger
 
 logger = get_logger("novavida_integration")
-
-CONFIG_JOB_OBRIGATORIA = {
-    "NOVAVIDA_CAMPANHA": settings.NOVAVIDA_CAMPANHA,
-    "NOVAVIDA_PROCESSO": settings.NOVAVIDA_PROCESSO,
-}
 
 
 def _login(page) -> None:
@@ -130,8 +139,13 @@ def _abrir_modal_novo_enriquecimento(page):
     return modal
 
 
-def _validar_configuracao_job() -> None:
-    faltando = [nome for nome, valor in CONFIG_JOB_OBRIGATORIA.items() if not valor]
+def _validar_configuracao_job(criar_campanha: bool) -> None:
+    obrigatorios = {"NOVAVIDA_PROCESSO": settings.NOVAVIDA_PROCESSO}
+    if not criar_campanha:
+        # Se for criar campanha nova dinamicamente, NOVAVIDA_CAMPANHA (nome
+        # de uma campanha ja existente) deixa de ser necessario.
+        obrigatorios["NOVAVIDA_CAMPANHA"] = settings.NOVAVIDA_CAMPANHA
+    faltando = [nome for nome, valor in obrigatorios.items() if not valor]
     if faltando:
         raise RuntimeError(
             "Configuracao de negocio do Nova Vida incompleta - faltam: "
@@ -140,12 +154,62 @@ def _validar_configuracao_job() -> None:
         )
 
 
-def _selecionar_campos(modal) -> None:
-    modal.locator("#campanhaselect").select_option(label=settings.NOVAVIDA_CAMPANHA)
+def _criar_nova_campanha(modal, nome: str) -> None:
+    """Cria uma Campanha nova no Nova Vida clicando no botao "+" ao lado do
+    campo Campanha, em vez de selecionar uma campanha ja existente.
+
+    NAO VALIDADO AO VIVO - os seletores abaixo sao a melhor tentativa com
+    base no padrao visual do modal (botao "+" logo ao lado do
+    #campanhaselect, um input que abre para digitar o nome, e um botao de
+    confirmacao tipo "Salvar"/"Criar"/"Adicionar"). Por isso
+    upload_e_higienizar() so chama esta funcao quando
+    permitir_criar_campanha=True, numa sessao supervisionada - qualquer
+    elemento que nao for encontrado levanta RuntimeError em vez de arriscar
+    clicar no elemento errado e criar uma campanha indevida no Nova Vida.
+    """
+    campo_campanha = modal.locator("#campanhaselect")
+    linha = campo_campanha.locator("xpath=ancestor::*[self::div][1]")
+    botao_criar = linha.get_by_role("button")
+    if botao_criar.count() == 0:
+        botao_criar = campo_campanha.locator("xpath=following-sibling::button[1]")
+    if botao_criar.count() == 0:
+        raise RuntimeError(
+            "Nao foi possivel localizar o botao '+' de criar Campanha ao lado de "
+            "#campanhaselect. Selectors nao validados ao vivo - inspecionar o DOM "
+            "real do modal antes de tentar novamente."
+        )
+    botao_criar.first.click(timeout=5000)
+
+    campo_nome = modal.locator("input[type='text']:visible, input:not([type]):visible").last
+    if campo_nome.count() == 0:
+        raise RuntimeError(
+            "Botao '+' de criar Campanha foi clicado, mas nenhum campo de texto "
+            "apareceu para digitar o nome da nova campanha."
+        )
+    campo_nome.fill(nome, timeout=5000)
+
+    botao_confirmar = modal.get_by_role(
+        "button", name=re.compile("Salvar|Criar|Adicionar|Confirmar", re.IGNORECASE)
+    )
+    if botao_confirmar.count() == 0:
+        raise RuntimeError(
+            f"Nome '{nome}' preenchido, mas nao foi encontrado um botao de "
+            "confirmacao (Salvar/Criar/Adicionar/Confirmar) para criar a campanha."
+        )
+    botao_confirmar.first.click(timeout=5000)
+    modal.locator("#campanhaselect").wait_for(timeout=5000)
+    logger.info("Campanha nova criada e selecionada: %s", nome)
+
+
+def _selecionar_campos(modal, criar_campanha: bool, nome_campanha: str) -> None:
+    if criar_campanha:
+        _criar_nova_campanha(modal, nome_campanha)
+    else:
+        modal.locator("#campanhaselect").select_option(label=settings.NOVAVIDA_CAMPANHA)
     modal.locator("#processo").select_option(label=settings.NOVAVIDA_PROCESSO)
     logger.info(
         "Campos selecionados no modal: Campanha=%s, Processo=%s",
-        settings.NOVAVIDA_CAMPANHA,
+        nome_campanha if criar_campanha else settings.NOVAVIDA_CAMPANHA,
         settings.NOVAVIDA_PROCESSO,
     )
 
@@ -237,18 +301,32 @@ def _baixar_resultado(
     )
 
 
-def upload_e_higienizar(caminho_csv: Path, permitir_job_real: bool = False) -> Path | None:
-    _validar_configuracao_job()
+def upload_e_higienizar(
+    caminho_csv: Path,
+    permitir_job_real: bool = False,
+    permitir_criar_campanha: bool = False,
+    headless: bool = True,
+) -> Path | None:
+    """`permitir_criar_campanha=True` faz o robo criar uma Campanha nova a
+    cada ciclo (nome UY3_DDMM_HHMM, conforme PDF v2) em vez de reaproveitar
+    a campanha fixa em settings.NOVAVIDA_CAMPANHA. Default False porque essa
+    interacao (botao "+") nunca foi validada ao vivo - so ligar numa sessao
+    supervisionada (ver _criar_nova_campanha).
+    `headless=False` abre o navegador visivel, util para acompanhar o robo
+    em execucao durante testes.
+    """
+    _validar_configuracao_job(permitir_criar_campanha)
     arquivo_novavida = _preparar_arquivo_novavida(caminho_csv)
+    nome_campanha = f"UY3_{datetime.now():%d%m_%H%M}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=headless)
         page = browser.new_page(accept_downloads=True)
         try:
             _login(page)
             _ir_para_enriquecimentos(page)
             modal = _abrir_modal_novo_enriquecimento(page)
-            _selecionar_campos(modal)
+            _selecionar_campos(modal, permitir_criar_campanha, nome_campanha)
             _fazer_upload(page, arquivo_novavida)
 
             if not permitir_job_real:

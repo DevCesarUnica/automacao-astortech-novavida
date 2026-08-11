@@ -1,0 +1,217 @@
+================================================================================
+AUTOMACAO ASTOR TECH -> NOVA VIDA
+Orientacoes do Processo (v2 - conforme PDF "Automacao Astor Tech -> Nova
+Vida", atualizado)
+================================================================================
+
+0. COMO O PROCESSO FUNCIONA HOJE (MANUAL) E DESAFIOS
+--------------------------------------------------------------------------------
+Etapas manuais atuais:
+  - Extracao manual no Astor Tech
+  - Tratamento da base no Excel
+  - Remocao de colunas
+  - Envio manual para o Nova Vida
+  - Download da base higienizada
+  - Disponibilizacao para operacao
+
+Principais desafios:
+  - Alto tempo operacional
+  - Muitas etapas manuais
+  - Risco de erros humanos
+  - Atraso na entrega dos leads
+  - Baixa padronizacao do processo
+
+1. OBJETIVO DO PROJETO
+--------------------------------------------------------------------------------
+Desenvolver um robo capaz de executar automaticamente:
+  - Extracao da base
+  - Tratamento dos dados
+  - Geracao do CSV
+  - Upload no Nova Vida
+  - Higienizacao
+  - Download da base final
+
+2. FLUXO GERAL (7 ETAPAS)
+--------------------------------------------------------------------------------
+01. Extracao da Base (Astor Tech)
+    Acessar Astor Tech -> Selecionar consulta UY3 -> Aplicar filtro
+    "Ultimas 24 horas" -> Atualizar filtros -> Extrair a base
+
+02. Tratamento Inicial (Filtragem Automatica)
+    Filtrar ticket superior a R$ 4.000,00 -> Considerar apenas clientes
+    consultados nas ultimas horas (ex.: ultimas 6 horas, parametrizavel)
+
+03. Preparacao do Arquivo (Tratamento da Base)
+    Duplicar a planilha -> Manter apenas a coluna CPF -> Salvar o arquivo
+    em formato CSV
+
+04. Integracao Nova Vida (Upload Automatico)
+    Enviar o arquivo para o Nova Vida usando as opcoes: NVBOOK, CEL, OBG,
+    BESTTIMETOCALL (processo "NVBOOK CEL OBG - BESTTIMETOCALL")
+
+05. Higienizacao (Processamento)
+    Higienizacao automatica -> Validacao dos contatos -> Enriquecimento
+    dos dados
+
+06. Retorno da Base (Download Automatico)
+    O robo baixa a base higienizada apos a conclusao do processamento
+
+07. Base Final (Entrega da Base)
+    Base pronta contendo: CPF, Nome, Valor Liberado, Parcela, Prazo,
+    Telefone, Consulta, E-mail
+
+    *** ATENCAO: layout final MUDOU. Antes eram 5 colunas (CPF, Nome,
+    Valor Liberado, Telefone, Email). Agora sao 8 colunas: CPF, Nome,
+    Valor Liberado, Parcela, Prazo, Telefone, Consulta, E-mail. ***
+
+3. EXTRACAO DA BASE NO ASTOR TECH (detalhado)
+--------------------------------------------------------------------------------
+  1. Acessar o Astor Tech e navegar ate Analise -> Painel de Controle.
+  2. Selecionar Tipo de Consulta: UY (UY3) -> clicar em "Consultar" para
+     abrir a tela de filtros.
+  3. Na secao de filtros ("Limite Por Periodo"), manter selecionado
+     APENAS o periodo "<= 24 HORAS" (nao selecionar mais o filtro de
+     faixa de Valor Liberado nesta etapa - essa regra passou a ser
+     aplicada so depois, no tratamento, ver secao 5).
+  4. Clicar em "Atualizar Filtros".
+  5. Retornar ao topo da pagina e clicar em "Exportar".
+  6. Na janela de exportacao ("Enviar para Campanha"), preencher:
+       - Nome do Arquivo: padrao UY3_DDMM_AAAA_HHMM (ex.: UY3_0308_1130)
+       - Finalidade: "Baixar Base"
+       - Limite Quantidade de Cliente (campo numerico, ex.: 705.759)
+     Clicar em "Baixar Base".
+
+  *** ATENCAO: o nome do arquivo mudou de UY3_DDMM_PERFILBASE (ex.:
+  UY3_1507_CLT) para UY3_DDMM_AAAA_HHMM (ex.: UY3_0308_1130). O modal de
+  exportacao tambem mudou: agora tem campos "Finalidade" e "Limite
+  Quantidade de Cliente" que nao existiam na versao anterior mapeada. ***
+
+4. EXPORTACAO DA BASE
+--------------------------------------------------------------------------------
+  Fluxo: Exportacoes -> localizar ultima base gerada -> menu de acoes
+  (3 pontos) -> Download -> arquivo disponivel localmente (.zip)
+
+5. TRATAMENTO DA BASE (apos download)
+--------------------------------------------------------------------------------
+Abrir o arquivo e manter apenas as colunas abaixo (deixou de ser so
+I/R/N - agora sao 7 colunas):
+
+  Coluna | Campo
+  -------|------------------------
+    I    | CPF
+    N    | Valor Liberado
+    O    | Numero de Parcelas
+    Q    | Data da Consulta
+    R    | Nome
+    S    | Data de Nascimento
+    T    | Valor da Parcela
+
+  *** ATENCAO: antes so mantinhamos I (CPF), R (Nome), N (Valor
+  Liberado). Agora tambem entram O (Parcelas), Q (Data da Consulta), S
+  (Data de Nascimento) e T (Valor da Parcela), porque o layout final
+  passou a incluir Parcela e Prazo. ***
+
+6. APLICACAO DOS FILTROS (pos-tratamento)
+--------------------------------------------------------------------------------
+  Campo           | Filtro
+  ----------------|--------------------------------
+  Valor Liberado  | Acima de R$ 4.000,00
+  Data da Consulta| Apenas ultimas X horas (ex.: ultimas 6 horas -
+                    parametro configuravel conforme necessidade da
+                    operacao)
+
+  Fluxo: Abrir filtros -> Valor Liberado > R$ 4.000 -> Data da Consulta
+  (ultimas horas) -> Base validada para higienizacao
+
+  *** NOVO: filtro adicional de "Data da Consulta - ultimas X horas" que
+  nao existia antes (distinto do filtro de 24h aplicado la na extracao
+  do Astor Tech). ***
+
+7. PREPARACAO DO ARQUIVO PARA O NOVA VIDA
+--------------------------------------------------------------------------------
+  - O Nova Vida aceita apenas arquivos contendo a coluna CPF para
+    higienizacao.
+  - Criar uma copia da base tratada, manter somente a coluna CPF,
+    remover as demais colunas.
+  - Salvar em CSV.
+
+  *** ATENCAO / DIVERGENCIA A CONFIRMAR: este PDF descreve o CSV como
+  "separado por virgulas". Porem, em teste real ja executado (job de 116
+  CPFs em 20/07/2026), o layout de entrada "(PF) PADRAO NV" do Nova Vida
+  exigiu CSV separado por PIPE ("sep=|" na primeira linha) - com
+  separador de virgula o job rodou com Saida=0 (nenhum CPF processado).
+  Manter o formato PIPE ja validado ao vivo ate reconfirmar com o Nova
+  Vida se algo mudou. ***
+
+8. ENVIO DA BASE PARA HIGIENIZACAO (Nova Vida)
+--------------------------------------------------------------------------------
+  Fluxo: Acessar Nova Vida -> Enriquecimento -> Adicionar -> Criar
+  Campanha (nome padrao UY3_DDMM_HHMM, ex.: UY3_0308_1100) -> Selecionar
+  processo BESTTIMETOCALL (opcao "NVBOOK CEL OBG - BESTTIMETOCALL") ->
+  Anexar arquivo CSV -> Iniciar Job
+
+  *** ATENCAO: mudanca de comportamento. Antes o robo selecionava uma
+  Campanha JA EXISTENTE (ex.: "CLT_UY3_1207") de uma lista fixa. Agora o
+  processo pede para CRIAR uma campanha nova a cada execucao, com nome
+  baseado em data/hora (UY3_DDMM_HHMM). Isso precisa ser mapeado ao vivo
+  no botao "+" do campo Campanha (ja identificado no modal, mas ainda
+  nao testado para criacao de campanha nova). ***
+
+9. DOWNLOAD DA BASE HIGIENIZADA E CONSOLIDACAO DOS DADOS (ETAPA NOVA)
+--------------------------------------------------------------------------------
+Esta etapa nao existia na especificacao anterior - e a parte que fecha o
+ciclo, juntando o resultado do Nova Vida de volta na base original do
+Astor Tech.
+
+  1. Baixar a base higienizada na tela de Enriquecimentos do Nova Vida.
+  2. Filtrar a coluna AB (indicador de WhatsApp), mantendo apenas os
+     clientes com WhatsApp disponivel (valor "S").
+  3. Juntar a coluna Y (DDD, ex.: campo DDDCEL1) com a coluna Z (Telefone,
+     ex.: campo CEL1) para formar o numero completo de contato.
+  4. Usar PROCX (equivalente a VLOOKUP) para trazer, por CPF, as
+     informacoes obtidas no Nova Vida (Telefone com WhatsApp e E-mail)
+     para a base original extraida do Astor Tech - que ja contem Nome,
+     CPF, Valor Liberado, Parcela, Prazo e Data da Consulta.
+
+  Resultado: base unica e completa, pronta para a operacao, com as
+  colunas: CPF, Nome, Valor Liberado, Parcela, Prazo, Telefone, Consulta,
+  E-mail.
+
+10. OBJETIVO DA AUTOMACAO
+--------------------------------------------------------------------------------
+Automatizar todo o processo de extracao, tratamento e higienizacao da
+base de clientes, reduzindo significativamente o tempo entre a geracao
+do lead e sua disponibilizacao para a operacao.
+
+Como o valor liberado e atualizado constantemente, e fundamental que os
+clientes sejam acionados o mais rapido possivel apos a extracao da base.
+A automacao permite que os leads cheguem a equipe comercial em menor
+tempo, aumentando a agilidade da operacao e as oportunidades de
+conversao.
+
+================================================================================
+RESUMO DAS MUDANCAS EM RELACAO A VERSAO ANTERIOR DESTE DOCUMENTO
+================================================================================
+  1. Extracao no Astor Tech: nao seleciona mais o filtro de faixa de
+     Valor Liberado (R$4.001 a R$8.000,99) na tela de filtros rapidos -
+     so o filtro de periodo "<=24 HORAS".
+  2. Nome do arquivo de export: UY3_DDMM_AAAA_HHMM (era
+     UY3_DDMM_PERFILBASE).
+  3. Modal de exportacao ganhou campos "Finalidade" e "Limite Quantidade
+     de Cliente".
+  4. Tratamento mantem 7 colunas (I, N, O, Q, R, S, T) em vez de 3 (I, R,
+     N) - inclui Numero de Parcelas, Data da Consulta, Data de
+     Nascimento e Valor da Parcela.
+  5. Novo filtro pos-tratamento por "Data da Consulta" (ultimas X horas,
+     parametrizavel).
+  6. Campanha no Nova Vida passa a ser CRIADA A CADA CICLO (nome
+     UY3_DDMM_HHMM), em vez de reaproveitar uma campanha fixa existente.
+  7. Nova etapa de consolidacao apos o download: filtro de WhatsApp
+     (coluna AB), montagem do telefone (colunas Y+Z) e PROCX/VLOOKUP para
+     unir Telefone e E-mail de volta na base original do Astor Tech.
+  8. Layout final passa de 5 para 8 colunas: CPF, Nome, Valor Liberado,
+     Parcela, Prazo, Telefone, Consulta, E-mail.
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================
