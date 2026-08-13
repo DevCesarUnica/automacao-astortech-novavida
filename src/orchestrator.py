@@ -94,6 +94,84 @@ def _limitar_leads(csv_final: Path, limite: int) -> Path:
     return destino
 
 
+def _recuperar_bases_pendentes(
+    resumo,
+    permitir_novavida_job_real: bool,
+    permitir_criar_campanha: bool,
+    headless: bool,
+) -> None:
+    """Varre data/final/ por bases ja tratadas e deduplicadas que nunca
+    chegaram a virar uma entrega em data/entregas/ (Nova Vida, consolidacao
+    ou e-mail falharam num ciclo anterior DEPOIS da deduplicacao ja ter
+    marcado os CPFs como processados no historico). Roda no INICIO de todo
+    ciclo, antes da extracao nova - mesmo espirito da recuperacao de
+    rascunhos de e-mail (ver _reenviar_rascunhos_pendentes em
+    src/notificacao.py).
+
+    CONFIRMADO NECESSARIO em producao em 12/08/2026: um ciclo das 17h
+    processou 733 leads novos (ja marcados no historico pela
+    deduplicacao), mas o Nova Vida ficou inacessivel
+    (net::ERR_CONNECTION_TIMED_OUT). Sem esta funcao, esses 733 leads
+    ficariam perdidos para sempre - a deduplicacao dos proximos ciclos
+    nunca mais os selecionaria de novo, ja que estao no historico. Essa
+    funcao formaliza o resgate manual que foi feito naquele caso
+    especifico (upload_e_higienizar + consolidar + enviar por e-mail a
+    partir do CSV que ja estava pronto em disco).
+
+    So tenta arquivos com menos de 48h (evita ficar tentando pra sempre
+    algo que falha de forma persistente, ex.: CPFs que o Nova Vida nunca
+    vai encontrar) e pula arquivos vazios (nada para processar).
+    """
+    limite_idade = datetime.now() - timedelta(hours=48)
+    for csv_dedup in sorted(settings.DATA_FINAL_DIR.glob("*_dedup*.csv")):
+        modificado = datetime.fromtimestamp(csv_dedup.stat().st_mtime)
+        if modificado < limite_idade:
+            continue
+
+        consolidado = settings.DATA_ENTREGAS_DIR / f"{csv_dedup.stem}_consolidado.csv"
+        if consolidado.exists():
+            continue
+
+        try:
+            df = pd.read_csv(csv_dedup, dtype={"CPF": str})
+        except Exception:
+            continue
+        if len(df) == 0:
+            continue
+
+        logger.warning(
+            "Base pendente encontrada (nunca chegou a ser entregue): %s (%d leads). "
+            "Tentando concluir o processamento agora.",
+            csv_dedup.name,
+            len(df),
+        )
+        try:
+            from src import consolidacao, notificacao, novavida_integration
+
+            resultado_novavida = novavida_integration.upload_e_higienizar(
+                csv_dedup,
+                permitir_job_real=permitir_novavida_job_real,
+                permitir_criar_campanha=permitir_criar_campanha,
+                headless=headless,
+            )
+            if resultado_novavida is None:
+                continue
+
+            resultado_final = consolidacao.consolidar(csv_dedup, resultado_novavida)
+            astor_tratado_xlsx = consolidacao.gerar_copia_formatada(csv_dedup)
+            final_xlsx = resultado_final.with_suffix(".xlsx")
+            notificacao.enviar_base_por_email(final_xlsx, astor_tratado_xlsx, headless=headless)
+
+            resumo.ok(
+                f"Recuperacao automatica: {csv_dedup.name} ({len(df)} leads) "
+                "processado e entregue com sucesso"
+            )
+            logger.info("Base pendente %s recuperada e entregue com sucesso.", csv_dedup.name)
+        except Exception as e:
+            resumo.falhou(f"Recuperacao automatica de {csv_dedup.name} ainda nao concluida: {e}")
+            logger.warning("Base pendente %s continua sem conseguir ser entregue: %s", csv_dedup.name, e)
+
+
 def run_ciclo(
     permitir_consulta_real: bool = False,
     permitir_novavida_job_real: bool = False,
@@ -110,6 +188,12 @@ def run_ciclo(
     inicio = time.time()
     try:
         logger.info("=== Iniciando ciclo ===")
+
+        if permitir_novavida_job_real:
+            try:
+                _recuperar_bases_pendentes(resumo, permitir_novavida_job_real, permitir_criar_campanha, headless)
+            except Exception as e:
+                logger.warning("Varredura de bases pendentes nao concluida: %s", e)
 
         from src import astor_extraction, data_treatment
 

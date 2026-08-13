@@ -121,15 +121,48 @@ FILTRO_PERIODO_TEXTO = "<= 24 HORAS"
 
 
 def _login(page) -> None:
-    page.goto(settings.ASTOR_URL, wait_until="networkidle", timeout=30000)
-    page.wait_for_timeout(800)
+    # CONFIRMADO ao vivo em 12/08/2026 (3 de 4 ciclos do dia falharam aqui):
+    # um dialogo promocional novo ("Turbine sua prospeccao com o SMS
+    # Inteligente", overlay CDK padrao do Angular Material) passou a aparecer
+    # logo apos o login e ficava bloqueando a pagina - como close_overlays()
+    # so era chamada DEPOIS da checagem de URL, o robo achava que o login
+    # tinha falhado (URL ainda parecia estar em "entrar") quando na verdade
+    # so estava atras do dialogo. Agora fecha overlays ANTES de checar a URL.
+    # CONFIRMADO ao vivo em 12/08/2026 (11h e 12h do mesmo dia): o Astor
+    # Tech as vezes fica bem mais lento que o normal pra carregar a tela de
+    # login (30s+ contra ~12s do normal, confirmado comparando execucoes
+    # reais) - nao e' falha permanente, e' lentidao intermitente do lado
+    # deles. Por isso tenta recarregar a pagina ate 3 vezes antes de
+    # desistir, em vez de derrubar o ciclo inteiro na primeira lentidao.
+    #
+    # CONFIRMADO ao vivo em 13/08/2026: a mesma lentidao tambem pode fazer o
+    # PROPRIO page.goto() estourar o timeout de 30s (a pagina nem chega a
+    # carregar, nao e' so o campo demorando) - isso acontecia FORA do
+    # try/except acima (que so cobria a espera pelo campo), entao o ciclo
+    # inteiro caia sem tentar de novo. Agora o goto() tambem esta dentro do
+    # try, entao qualquer uma das duas lentidoes aciona o mesmo retry.
+    for tentativa in range(1, 4):
+        try:
+            page.goto(settings.ASTOR_URL, wait_until="networkidle", timeout=30000)
+            page.wait_for_timeout(800)
+            page.get_by_label("Endereço de e-mail").wait_for(state="visible", timeout=20000)
+            break
+        except Exception:
+            if tentativa == 3:
+                raise
+            logger.warning(
+                "Astor Tech lento (tentativa %d/3) - pagina ou campo de login nao "
+                "carregaram a tempo, tentando de novo.",
+                tentativa,
+            )
+
     page.get_by_label("Endereço de e-mail").fill(settings.ASTOR_USER)
     page.get_by_label("Senha").fill(settings.ASTOR_PASS)
     page.get_by_role("button", name="Entrar").click()
     page.wait_for_timeout(3000)
+    close_overlays(page)
     if "entrar" in page.url:
         raise RuntimeError("Login no Astor Tech falhou (permaneceu na tela de login).")
-    close_overlays(page)
     logger.info("Login no Astor Tech OK. URL: %s", page.url)
 
 
@@ -226,15 +259,21 @@ def _exportar(page, nome_arquivo: str) -> None:
     em _atualizar_filtros). O tempo de recalculo varia com o volume de
     resultados, entao aqui o codigo faz polling do estado do botao em vez de
     assumir que ja esta pronto.
+
+    CONFIRMADO ao vivo em 13/08/2026: os 20s antigos as vezes nao bastam na
+    mesma lentidao intermitente do Astor Tech ja vista no login (ver
+    _login) - checagem manual logo apos uma falha real mostrou o botao
+    habilitado normalmente, so tinha demorado mais que 20s. Ampliado para
+    45s antes de desistir.
     """
     botao_exportar = page.get_by_role("button", name="Exportar").first
-    for _ in range(20):
+    for _ in range(45):
         if botao_exportar.is_enabled():
             break
         page.wait_for_timeout(1000)
     else:
         raise RuntimeError(
-            "Botao 'Exportar' permaneceu desabilitado apos 20s esperando os filtros "
+            "Botao 'Exportar' permaneceu desabilitado apos 45s esperando os filtros "
             "recalcularem. Pode indicar que a consulta com os filtros aplicados nao "
             "retornou nenhum resultado - verificar manualmente antes de tentar novamente."
         )

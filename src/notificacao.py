@@ -59,6 +59,7 @@ Assunto do e-mail: "Base de leads higienizadas UY3 DD/MM/AAAA HH:MM".
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -266,33 +267,139 @@ def _compor_e_enviar(page, assunto: str, corpo: str, anexos: list[Path]) -> None
         page.wait_for_timeout(2000)
         logger.info("Anexo adicionado: %s", anexo.name)
 
-    # CONFIRMADO EM PRODUCAO em 11/08/2026 (ciclos das 09:00 e 11:00, mesmo
-    # dia): o clique em "Enviar" as vezes nao completa o envio na primeira
-    # tentativa - provavel corrida com o Outlook ainda "finalizando" os
-    # anexos (o clique em si nunca lanca excecao, entao so a verificacao do
-    # compose fechado detecta isso). Reabrir o mesmo rascunho manualmente
-    # minutos depois e clicar Enviar de novo sempre funcionou de primeira -
-    # por isso agora tenta de novo automaticamente em vez de desistir na
-    # primeira falha.
-    for tentativa in range(1, 4):
+    _clicar_enviar_e_confirmar(page)
+
+
+def _clicar_enviar_e_confirmar(page, tentativas: int = 3) -> None:
+    """Espera o botao 'Enviar' ficar habilitado, clica, e confirma que o
+    compose realmente fechou. Reaproveitada tanto para o e-mail recem-
+    composto quanto para reenviar um rascunho pendente encontrado por
+    _reenviar_rascunhos_pendentes() - a logica de garantir o envio e' a
+    mesma nos dois casos.
+
+    CONFIRMADO EM PRODUCAO em 11/08/2026, dois bugs reais e distintos:
+    1) Ciclo das 14h (3199 leads, anexos maiores): o botao "Enviar" fica
+       com aria-disabled="true" enquanto o Outlook ainda esta processando
+       os anexos recem-anexados - clicar nesse estado nunca registra
+       (Playwright espera o elemento ficar "enabled" e estoura
+       TimeoutError). A espera fixa de 2s apos cada anexo nao e'
+       suficiente para anexos grandes, entao espera ativamente o botao
+       ficar habilitado antes de tentar clicar.
+    2) Ciclos das 09h e 11h (mesmo dia): mesmo com o botao habilitado, o
+       clique em "Enviar" as vezes nao completa o envio na primeira
+       tentativa (o clique em si nunca lanca excecao, entao so a
+       verificacao do compose fechado detecta isso). Reabrir o mesmo
+       rascunho manualmente minutos depois e clicar Enviar de novo sempre
+       funcionou de primeira - por isso tenta de novo automaticamente em
+       vez de desistir na primeira falha.
+    """
+    botao_enviar = page.locator('button[aria-label="Enviar"], button[aria-label="Send"]').first
+    botao_enviar.wait_for(state="visible", timeout=10000)
+    inicio_espera = time.time()
+    while botao_enviar.get_attribute("aria-disabled") == "true":
+        if time.time() - inicio_espera > 60:
+            raise RuntimeError(
+                "Botao 'Enviar' continuou desabilitado por mais de 60s - os anexos podem "
+                "nao ter terminado de processar no Outlook."
+            )
+        page.wait_for_timeout(1000)
+
+    for tentativa in range(1, tentativas + 1):
         page.locator('button[aria-label="Enviar"], button[aria-label="Send"]').first.click(timeout=10000)
         page.wait_for_timeout(3000)
         if page.locator('[aria-label="Para"]').count() == 0:
             return
         logger.warning(
-            "Compose nao fechou apos clicar 'Enviar' (tentativa %d/3) - tentando de novo.", tentativa
+            "Compose nao fechou apos clicar 'Enviar' (tentativa %d/%d) - tentando de novo.",
+            tentativa,
+            tentativas,
         )
         page.wait_for_timeout(2000)
 
     raise RuntimeError(
-        "Clique em 'Enviar' nao fechou o compose apos 3 tentativas - o e-mail provavelmente "
-        "NAO foi enviado e ficou parado em Rascunhos. Verificar manualmente."
+        f"Clique em 'Enviar' nao fechou o compose apos {tentativas} tentativas - o e-mail "
+        "provavelmente NAO foi enviado e ficou parado em Rascunhos."
     )
+
+
+_PADRAO_ASSUNTO_AUTOMACAO = re.compile(r"Base de leads higienizadas UY3", re.I)
+
+
+def _reenviar_rascunhos_pendentes(page, limite: int = 10) -> int:
+    """Varre a pasta Rascunhos por e-mails DESTA automacao que ficaram
+    parados em ciclos anteriores (compose nao fechou apos "Enviar", por
+    qualquer um dos motivos documentados em _clicar_enviar_e_confirmar) e
+    tenta enviar cada um de novo. Roda no INICIO de todo envio, antes de
+    compor o e-mail do ciclo atual - assim, mesmo que um envio falhe
+    TODAS as tentativas num ciclo, ele se autorrecupera sozinho no
+    proximo ciclo que conseguir logar no Outlook, sem precisar de
+    intervencao manual.
+
+    CONFIRMADO NECESSARIO em producao: 3 rascunhos reais (leads de
+    verdade, ciclos das 09h/11h/14h do dia 11/08/2026) ficaram presos e
+    precisaram ser reenviados manualmente antes desta funcao existir -
+    ela formaliza exatamente o procedimento manual que resolveu os 3.
+
+    So mexe em rascunhos cujo assunto bate com o padrao desta automacao
+    (_PADRAO_ASSUNTO_AUTOMACAO) - nunca toca em rascunhos pessoais do
+    usuario.
+    """
+    page.get_by_text("Rascunhos", exact=True).first.click(timeout=10000)
+    page.wait_for_timeout(1500)
+
+    # CONFIRMADO ao vivo em 11/08/2026: apos um reenvio bem sucedido, um
+    # resquicio (toast/notificacao ou item duplicado momentaneo) com o
+    # mesmo texto pode continuar sendo encontrado por mais uma volta do
+    # loop, mesmo restringindo a busca a role="option" - isso fazia
+    # tentar abrir algo que nao e' mais um rascunho de verdade e travar
+    # esperando um botao "Enviar" que nunca aparece. Por isso guarda os
+    # assuntos ja tentados NESTA varredura e para assim que reencontrar
+    # um repetido, em vez de fazer varias tentativas contra o mesmo item.
+    ja_tentados: set[str] = set()
+    enviados = 0
+    for _ in range(limite):
+        item = page.get_by_role("option").filter(has_text=_PADRAO_ASSUNTO_AUTOMACAO).first
+        if item.count() == 0:
+            break
+        assunto_pendente = item.inner_text()
+        if assunto_pendente in ja_tentados:
+            break
+        ja_tentados.add(assunto_pendente)
+        item.click(timeout=10000)
+        page.wait_for_timeout(1500)
+        try:
+            _clicar_enviar_e_confirmar(page)
+            enviados += 1
+            logger.info("Rascunho pendente de ciclo anterior reenviado.")
+        except Exception as e:
+            logger.warning("Rascunho pendente encontrado, mas nao foi possivel reenviar agora: %s", e)
+            break
+        page.wait_for_timeout(3000)
+        page.get_by_text("Rascunhos", exact=True).first.click(timeout=10000)
+        page.wait_for_timeout(1000)
+
+    if enviados:
+        logger.info("Recuperacao automatica: %d rascunho(s) pendente(s) reenviado(s) com sucesso.", enviados)
+    return enviados
 
 
 def enviar_base_por_email(
     caminho_final_xlsx: Path, caminho_astor_tratado_xlsx: Path, headless: bool = True
 ) -> None:
+    """Envia a base final por e-mail com o maximo de robustez razoavel:
+      1) Varre e reenvia qualquer rascunho pendente de ciclos anteriores
+         ANTES de compor o e-mail novo (auto-recuperacao, ver
+         _reenviar_rascunhos_pendentes).
+      2) Tenta o fluxo completo (login + recuperacao + compor + enviar)
+         ate 3 vezes, com um navegador NOVO a cada tentativa, antes de
+         desistir de verdade - cobre falhas transitorias que um retry
+         dentro da mesma sessao/pagina nao resolveria (ex.: login
+         instavel, pagina em estado inconsistente).
+    Mesmo se as 3 tentativas falharem, o rascunho desta execucao (se
+    chegou a ser criado) fica pronto pra ser pego pela varredura de
+    recuperacao do PROXIMO ciclo - o sistema se autocura sem precisar de
+    intervencao manual, mesmo no pior caso.
+    """
     _validar_configuracao_email()
 
     assunto = f"Base de leads higienizadas UY3 {datetime.now():%d/%m/%Y %H:%M}"
@@ -308,21 +415,55 @@ def enviar_base_por_email(
         "Enviado automaticamente pela automacao Astor Tech -> Nova Vida."
     )
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-        page = browser.new_page()
-        try:
-            _login(page)
-            _compor_e_enviar(page, assunto, corpo, [caminho_final_xlsx, caminho_astor_tratado_xlsx])
-            logger.info(
-                "E-mail '%s' enviado via Outlook Web para %s com anexos: %s, %s",
-                assunto,
-                settings.EMAIL_DESTINATARIO,
-                caminho_final_xlsx.name,
-                caminho_astor_tratado_xlsx.name,
-            )
-        finally:
-            browser.close()
+    tentativas_totais = 3
+    ultimo_erro: Exception | None = None
+    for tentativa_geral in range(1, tentativas_totais + 1):
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless)
+            page = browser.new_page()
+            try:
+                _login(page)
+
+                try:
+                    _reenviar_rascunhos_pendentes(page)
+                except Exception as e:
+                    # Falha na varredura nao pode impedir o envio do e-mail
+                    # deste ciclo - e' um bonus de recuperacao, nao o objetivo
+                    # principal desta chamada.
+                    logger.warning("Varredura de rascunhos pendentes nao concluida: %s", e)
+
+                _compor_e_enviar(page, assunto, corpo, [caminho_final_xlsx, caminho_astor_tratado_xlsx])
+                logger.info(
+                    "E-mail '%s' enviado via Outlook Web para %s com anexos: %s, %s",
+                    assunto,
+                    settings.EMAIL_DESTINATARIO,
+                    caminho_final_xlsx.name,
+                    caminho_astor_tratado_xlsx.name,
+                )
+                return
+            except Exception as e:
+                ultimo_erro = e
+                restam = tentativas_totais - tentativa_geral
+                logger.warning(
+                    "Tentativa %d/%d de enviar e-mail falhou: %s. %s",
+                    tentativa_geral,
+                    tentativas_totais,
+                    e,
+                    f"Tentando de novo com navegador novo ({restam} restantes)."
+                    if restam
+                    else "Sem mais tentativas neste ciclo.",
+                )
+            finally:
+                browser.close()
+        if tentativa_geral < tentativas_totais:
+            time.sleep(10)
+
+    raise RuntimeError(
+        f"Nao foi possivel enviar o e-mail apos {tentativas_totais} tentativas completas "
+        f"(login + envio, navegador novo a cada vez). Ultimo erro: {ultimo_erro}. Se um "
+        "rascunho chegou a ser criado, ele sera reenviado automaticamente pela varredura de "
+        "recuperacao no proximo ciclo que conseguir logar no Outlook."
+    )
 
 
 if __name__ == "__main__":
