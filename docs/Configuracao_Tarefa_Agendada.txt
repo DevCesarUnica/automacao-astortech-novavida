@@ -1,0 +1,198 @@
+RELATORIO DE CONFIGURACAO DA TAREFA AGENDADA
+"Automacao Astor Tech - Nova Vida"
+Gerado em: 14/08/2026 (a partir da maquina cesar.barros)
+Status no momento da exportacao: DESABILITADA (pausada, configuracao preservada)
+
+==================================================================
+1. DADOS GERAIS DA TAREFA (Agendador de Tarefas do Windows)
+==================================================================
+Nome da tarefa .......... Automacao Astor Tech - Nova Vida
+Local (TaskPath) ......... \ (raiz da Biblioteca do Agendador de Tarefas)
+Descricao ................ Roda o ciclo completo (extracao Astor Tech, tratamento,
+                            upload/higienizacao Nova Vida, consolidacao e envio por
+                            e-mail) em 10 horarios fixos, 08h-17h, dias uteis.
+
+==================================================================
+2. AGENDAMENTO (TRIGGERS)
+==================================================================
+Tipo de gatilho: Calendario semanal (CalendarTrigger / ScheduleByWeek)
+Repeticao: WeeksInterval = 1 (todas as semanas)
+Dias da semana: Segunda, Terca, Quarta, Quinta, Sexta (dias uteis)
+
+10 gatilhos, um por horario fixo (nao e' "a cada 1 hora" via repeticao interna,
+e sim 10 disparos distintos configurados manualmente):
+  08:00
+  09:00
+  10:00
+  11:00
+  12:00
+  13:00
+  14:00
+  15:00
+  16:00
+  17:00
+
+Data-base de inicio de cada gatilho (StartBoundary): 2026-08-06 (fuso -03:00)
+  Observacao: essa data e' apenas a referencia inicial de cada CalendarTrigger;
+  como a repeticao e' semanal (WeeksInterval=1) e os dias uteis estao marcados,
+  a tarefa continua disparando indefinidamente nesses horarios, nesses dias,
+  independente da data atual.
+
+==================================================================
+3. ACAO (O QUE A TAREFA EXECUTA)
+==================================================================
+Programa/script (Execute) .. C:\Users\cesar.barros\Desktop\automacaoBaseClientes\.venv\Scripts\python.exe
+Argumentos ................. -m src.orchestrator --once --permitir-consulta-real --permitir-novavida-job-real
+Iniciar em (WorkingDirectory) C:\Users\cesar.barros\Desktop\automacaoBaseClientes
+
+Observacao importante: o executavel usado e' o Python DENTRO do ambiente
+virtual do projeto (.venv), nao um Python global. Na outra maquina, o caminho
+completo do .venv\Scripts\python.exe deve ser ajustado para o local real onde
+o projeto (automacaoBaseClientes) for instalado, caso nao seja o mesmo
+"C:\Users\<usuario>\Desktop\automacaoBaseClientes".
+
+As flags usadas (--once --permitir-consulta-real --permitir-novavida-job-real)
+sao as que habilitam o ciclo real de producao (consulta real ao Astor Tech e
+job real no Nova Vida, com possivel custo). Rodar sem essas flags, ou com
+outras combinacoes, muda o comportamento do robo — ver "python -m
+src.orchestrator --help" no codigo (src/orchestrator.py).
+
+==================================================================
+4. USUARIO / PERMISSOES (PRINCIPAL)
+==================================================================
+Executar como usuario ...... cesar.barros (conta local, SID
+                              S-1-5-21-4062587801-1023271527-1075694101-2799)
+Tipo de logon (LogonType) .. InteractiveToken (equivale a "Executar somente
+                              quando o usuario estiver conectado")
+Nivel de execucao (RunLevel) Limited (NAO usa "Executar com privilegios mais
+                              altos")
+
+Na outra maquina, a tarefa deve ser criada com o usuario que fara login na
+sessao interativa (ou trocada para "Executar quer o usuario esteja conectado
+ou nao", se for preciso rodar sem sessao aberta — isso exige salvar senha da
+conta no agendador).
+
+==================================================================
+5. CONFIGURACOES (SETTINGS) DA TAREFA
+==================================================================
+Nao iniciar se estiver na bateria ....... Sim (DisallowStartIfOnBatteries=true)
+Parar se passar a usar bateria .......... Sim (StopIfGoingOnBatteries=true)
+Acordar o computador para executar ...... Sim (WakeToRun=true)
+Multiplas instancias ..................... Ignorar nova instancia se ja
+                                            houver uma rodando (IgnoreNew)
+Executar assim que possivel apos atraso.. Nao (StartWhenAvailable=false)
+  -> ou seja, se o PC estiver desligado/dormindo no horario exato, o disparo
+     daquele horario NAO e' recuperado depois.
+Tempo limite de execucao (ExecutionTimeLimit) 72 horas (PT72H)
+Prioridade ................................ 7 (padrao)
+Compatibilidade ............................ Windows 7 (Win7)
+Motor de agendamento unificado ............. Habilitado (UseUnifiedSchedulingEngine=true)
+Config. de ociosidade (IdleSettings) ....... Duracao 10 min / Timeout 1h /
+                                              nao para nem reinicia por ociosidade
+                                              (nao usados, pois nao ha condicao
+                                              "so iniciar se ocioso")
+
+==================================================================
+6. PRE-REQUISITOS NA MAQUINA DE DESTINO (fora do Agendador)
+==================================================================
+Para a tarefa funcionar de forma identica em outra maquina, alem de recriar
+o agendamento acima, e' necessario:
+
+a) Copiar o projeto completo (pasta automacaoBaseClientes) para a nova maquina,
+   incluindo o codigo em src/ e config/.
+
+b) Criar o ambiente virtual Python no mesmo caminho relativo do projeto e
+   instalar as dependencias:
+     python -m venv .venv
+     .venv\Scripts\pip install -r requirements.txt
+
+c) Criar um arquivo ".env" na raiz do projeto (nao versionado, contem
+   credenciais) com base no modelo ".env.example". Variaveis necessarias:
+     ASTOR_URL, ASTOR_USER, ASTOR_PASS
+     NOVAVIDA_USER, NOVAVIDA_PASS, NOVAVIDA_EMPRESA, NOVAVIDA_URL
+     NOVAVIDA_CAMPANHA, NOVAVIDA_SUBCAMPANHA, NOVAVIDA_PROCESSO,
+     NOVAVIDA_LAYOUT_ENTRADA, NOVAVIDA_LAYOUT_SAIDA
+     VALOR_MIN, VALOR_MAX
+     INTERVALO_HORAS (usado so no modo "loop continuo", nao no modo --once
+     usado pela tarefa agendada)
+     FILTRO_HORAS_CONSULTA
+     EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, EMAIL_REMETENTE, EMAIL_SENHA,
+     EMAIL_DESTINATARIO
+   IMPORTANTE: os valores reais (usuarios, senhas, senha de app do e-mail)
+   NAO estao neste relatorio por seguranca. Devem ser copiados manualmente
+   do arquivo .env original ou re-cadastrados.
+
+d) Se o caminho do projeto na nova maquina for diferente de
+   "C:\Users\cesar.barros\Desktop\automacaoBaseClientes", ajustar tanto o
+   "Iniciar em" quanto o caminho do executavel na acao da tarefa (item 3).
+
+==================================================================
+7. COMO RECRIAR A TAREFA (RESUMO PRATICO)
+==================================================================
+Passos no Agendador de Tarefas do Windows (taskschd.msc) na maquina nova:
+
+1. Criar Tarefa (nao "Tarefa Basica", para poder configurar os 10 gatilhos).
+2. Aba Geral:
+   - Nome: Automacao Astor Tech - Nova Vida
+   - Descricao: (ver item 1 acima)
+   - Executar apenas quando o usuario estiver conectado
+   - NAO marcar "Executar com privilegios mais altos"
+3. Aba Disparadores: criar 10 gatilhos "Semanalmente", repetir a cada 1
+   semana, dias marcados = seg/ter/qua/qui/sex, um gatilho para cada horario:
+   08:00, 09:00, 10:00, 11:00, 12:00, 13:00, 14:00, 15:00, 16:00, 17:00.
+4. Aba Acoes: Nova acao "Iniciar um programa":
+   - Programa/script: <caminho do projeto>\.venv\Scripts\python.exe
+   - Adicionar argumentos: -m src.orchestrator --once --permitir-consulta-real --permitir-novavida-job-real
+   - Iniciar em: <caminho do projeto>
+5. Aba Condicoes: marcar "Iniciar a tarefa somente se o computador estiver
+   com energia CA" e "Interromper se o computador passar a usar bateria" e
+   "Ativar o computador para executar a tarefa".
+6. Aba Configuracoes: NAO marcar "Executar a tarefa assim que possivel apos
+   um inicio agendado perdido"; limite de tempo de execucao 3 dias (72h);
+   regra para instancias simultaneas: "Nao iniciar uma nova instancia".
+7. Salvar. Confirmar que o arquivo .env do projeto (item 6-c acima) esta
+   preenchido antes do primeiro disparo automatico.
+
+Alternativa via linha de comando (PowerShell, como administrador ou como o
+proprio usuario que vai executar a tarefa), repetindo para cada um dos 10
+horarios (exemplo do horario das 08:00; repetir trocando a hora):
+
+  $action  = New-ScheduledTaskAction -Execute "<caminho>\.venv\Scripts\python.exe" `
+               -Argument "-m src.orchestrator --once --permitir-consulta-real --permitir-novavida-job-real" `
+               -WorkingDirectory "<caminho do projeto>"
+  $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 08:00
+  $settings = New-ScheduledTaskSettingsSet -DisallowStartIfOnBatteries -StopIfGoingOnBatteries -WakeToRun
+  Register-ScheduledTask -TaskName "Automacao Astor Tech - Nova Vida" -Action $action -Trigger $trigger -Settings $settings -Description "Roda o ciclo completo (...)"
+
+  Para os demais 9 horarios, usar Get-ScheduledTask + $task.Triggers +=
+  New-ScheduledTaskTrigger ... e Set-ScheduledTask, ou simplesmente exportar
+  o XML original (secao 8) e importar direto — mais simples e' o metodo do
+  item 8 abaixo.
+
+==================================================================
+8. METODO MAIS SIMPLES E EXATO: IMPORTAR O XML ORIGINAL
+==================================================================
+O XML completo da tarefa (exportado com "schtasks /query /tn "Automacao
+Astor Tech - Nova Vida" /xml ONE") esta salvo em:
+  docs\Automacao_Astor_Tech_Nova_Vida_TaskScheduler.xml
+
+Na maquina nova, apos copiar o projeto e ajustar os caminhos do .venv/python
+dentro do XML (se o caminho do projeto mudar), basta importar:
+
+  PowerShell (como o usuario que vai rodar a tarefa):
+    Register-ScheduledTask -TaskName "Automacao Astor Tech - Nova Vida" -Xml (Get-Content "docs\Automacao_Astor_Tech_Nova_Vida_TaskScheduler.xml" | Out-String)
+
+  Ou pelo Agendador de Tarefas (GUI): Acao > Importar Tarefa... e selecionar
+  o arquivo XML.
+
+  Isso recria os 10 gatilhos, a acao e todas as configuracoes de forma
+  identica, sem precisar recriar manualmente cada horario.
+
+==================================================================
+9. COMO REATIVAR/PAUSAR (LEMBRETE)
+==================================================================
+A tarefa nesta maquina foi apenas DESABILITADA (nao excluida), preservando
+gatilhos e acao. Para pausar/retomar sem perder a configuracao:
+
+  Pausar:   Disable-ScheduledTask -TaskName "Automacao Astor Tech - Nova Vida"
+  Retomar:  Enable-ScheduledTask  -TaskName "Automacao Astor Tech - Nova Vida"
